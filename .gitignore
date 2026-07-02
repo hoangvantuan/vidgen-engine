@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.DS_Store
+# cache filename → media_id, omniflash tự sinh khi upload
+media-id.js
+# output tạm của engine
+output/
+# dự án video (media nặng) — bỏ dòng này nếu muốn version cả dự án
+projects/
