@@ -72,12 +72,55 @@ def norm_transition(tr):
     return None
 
 
+def apply_sfx_layer(video, pdir, sfx_vol):
+    """Consumer cho scenes[].sfx[] — trộn SFX làm LỚP THỨ 3 (dưới giọng + trên nhạc), đặt đúng
+    thời điểm mỗi cảnh theo 05_audio/timings.json. File nguồn: 05_audio/sfx/sfxNN.mp3 (gen bằng
+    gen_sfx.py). Nhờ đó field sfx[] KHÔNG còn mồ côi. Không có timings/sfx → bỏ qua, trả False."""
+    timings_p = pdir / "05_audio" / "timings.json"
+    sfx_dir = pdir / "05_audio" / "sfx"
+    if not timings_p.exists() or not sfx_dir.is_dir():
+        return False
+    timings = json.loads(timings_p.read_text(encoding="utf-8"))
+    items = [(sfx_dir / f"sfx{int(t['id']):02d}.mp3", float(t["start"]))
+             for t in timings if (sfx_dir / f"sfx{int(t['id']):02d}.mp3").exists()]
+    if not items:
+        return False
+    has_a = bool(subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "a", "-show_entries", "stream=index",
+         "-of", "csv=p=0", str(video)], capture_output=True, text=True).stdout.strip())
+    ins, fc, labels = [], [], []
+    for i, (f, start) in enumerate(items):
+        ins += ["-i", str(f)]
+        fo = max(0.2, dur(f) - 0.5)
+        ms = int(start * 1000)
+        fc.append(f"[{i + 1}:a]volume={sfx_vol},afade=t=in:st=0:d=0.3,"
+                  f"afade=t=out:st={fo:.2f}:d=0.5,adelay={ms}|{ms}[x{i}]")
+        labels.append(f"[x{i}]")
+    base = ("[0:a]" if has_a else "") + "".join(labels)
+    n = len(items) + (1 if has_a else 0)
+    dur_mode = "first" if has_a else "longest"
+    fc.append(f"{base}amix=inputs={n}:normalize=0:duration={dur_mode}[mx];"
+              f"[mx]alimiter=limit=0.95[aout]")
+    tmp = video.with_name(video.stem + "__sfxtmp" + video.suffix)
+    run(["ffmpeg", "-y", "-v", "error", "-i", str(video), *ins,
+         "-filter_complex", ";".join(fc), "-map", "0:v", "-c:v", "copy",
+         "-map", "[aout]", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", str(tmp)])
+    tmp.replace(video)
+    print(f"🔊 SFX layer: trộn {len(items)} hiệu ứng (sfx-vol={sfx_vol}) theo timings")
+    return True
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--project", required=True, help="thư mục dự án chứa project.json")
     ap.add_argument("--bgm", default="", help="file nhạc nền — override cả music.mood/file trong manifest")
     ap.add_argument("--bgm-dir", default="", help="thư viện nhạc theo mood (mặc định: assets/bgm/ ở root engine)")
-    ap.add_argument("--bgm-vol", type=float, default=0.9)
+    ap.add_argument("--bgm-vol", type=float, default=1.2,
+                    help="âm lượng nhạc nền trước ducking (default 1.2 — đủ nghe dưới giọng; tăng nếu nhạc còn nhỏ)")
+    ap.add_argument("--sfx", choices=["auto", "on", "off"], default="auto",
+                    help="lớp SFX từ 05_audio/sfx/ (auto=mix nếu có file; off=bỏ). Consumer cho scenes[].sfx[]")
+    ap.add_argument("--sfx-vol", type=float, default=0.35,
+                    help="âm lượng SFX (dưới giọng; default 0.35)")
     ap.add_argument("--endcard", default="", help="ảnh end-card cuối (tùy chọn)")
     ap.add_argument("--endcard-dur", type=float, default=2.5)
     ap.add_argument("--tail", type=float, default=1.5, help="giây nán thêm sau khi giọng dứt (chống cụt)")
@@ -253,9 +296,10 @@ def main():
         cmd += ["-i", str(narration)]
         if bgm:
             cmd += ["-stream_loop", "-1", "-i", bgm]
-            # ducking chuẩn mixing (ratio 4:1, attack 15ms, release 300ms) — nhạc lùi dưới giọng
+            # ducking dịu (ratio 3:1, threshold 0.06) — nhạc LÙI dưới giọng nhưng vẫn NGHE RÕ.
+            # Default cũ ratio=4/threshold=0.03 nén nhạc gần như tắt vì giọng đọc gần liên tục.
             fc.append(f"[2:a]volume={a.bgm_vol}[b];[b][1:a]sidechaincompress="
-                      f"threshold=0.03:ratio=4:attack=15:release=300[duck];"
+                      f"threshold=0.06:ratio=3:attack=15:release=300[duck];"
                       f"[1:a][duck]amix=inputs=2:duration=first:dropout_transition=0,"
                       f"apad=pad_dur={a.tail}[aout]")
             amap = "[aout]"
@@ -275,6 +319,10 @@ def main():
     cmd += ["-t", f"{total:.3f}", "-c:v", "libx264", "-preset", "medium", "-crf", "18",
             "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", str(out)]
     run(cmd)
+
+    # ── Lớp SFX (consumer cho scenes[].sfx[]) — áp TRƯỚC light để bản nhẹ kế thừa ──
+    if a.sfx != "off":
+        apply_sfx_layer(out, pdir, a.sfx_vol)
 
     if a.light:
         light = out.with_name(out.stem + "_light" + out.suffix)

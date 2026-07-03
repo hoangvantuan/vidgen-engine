@@ -48,6 +48,13 @@ Mỗi cảnh: submit → poll (~44s-vài phút) → tải → xóa watermark →
 Lỗi tự retry 1 lần; vẫn hỏng → `status: "failed"`, chạy tiếp cảnh khác (không chết cả batch).
 Xong batch báo user danh sách failed để quyết: gen lại / sửa prompt / bỏ cảnh.
 
+**Frame-chaining (chuyển cảnh LIỀN MẠCH):** cảnh nào đặt `link_prev: true` trong manifest thì
+`scene-clips` tự trích **khung cuối NÉT nhất** của clip cảnh trước (chọn theo độ nét, chống
+motion-blur) → dùng làm khung đầu cảnh này → không gian/chuyển động nối liền, chỉ cần xfade nhẹ là
+mượt. Ràng buộc: **gen TUẦN TỰ** (cảnh trước phải xong trước — cùng run hoặc run trước), nên tránh
+`--scene N` lẻ làm đứt chuỗi. Chỉ bật cho cặp cảnh CÙNG mạch/bối cảnh; đổi cảnh hoàn toàn thì để `false`
+và dùng transition biên tập (cut/match cut) ở Stage 4.
+
 ## Bước 3 · QC nhanh trước khi sang ráp
 
 Xem từng clip trong `04_clips/`: ☐ nhân vật khớp anchor ☐ chuyển động không giật/AI-tell

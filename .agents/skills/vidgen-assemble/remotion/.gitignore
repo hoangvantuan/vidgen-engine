@@ -1,0 +1,7 @@
+# Deps + build (cài khi opt-in: npm install)
+node_modules/
+out/
+
+# Sinh khi chạy make_props.py — KHÔNG commit (bg video/font copy + props)
+public/
+props.json

@@ -8,7 +8,14 @@ description: STAGE 1 của pipeline vidgen — biến Ý TƯỞNG thành brief +
 Sản phẩm của stage này là thứ RẺ NHẤT để sửa — mọi lỗi lọt qua đây sẽ đắt gấp nhiều lần
 ở stage gen (tốn credit) và ráp. Vì vậy: viết kỹ, duyệt kỹ, khóa rồi mới đi tiếp.
 
-## Bước 1 · Brief — TƯ VẤN loại video trước, đừng bắt user tự chọn
+## Bước 1 · Brief — PHỎNG VẤN quyết định (grilling), đừng bắt user tự chọn
+
+**Cách hỏi (bắt buộc — đọc `references/decision-grilling.md`):** brief là tầng RẺ NHẤT để
+sửa; grill kỹ ở đây để moi giả định ngầm trước khi nó thành clip hỏng. Đi theo **cây quyết
+định 5 nhánh** (mục tiêu duy nhất → persona → loại video → nền tảng/tỉ lệ → thời lượng),
+**hỏi từng câu một, mỗi câu kèm đề xuất + 1 rủi ro nếu chọn sai** — KHÔNG bắn cả 5 câu một
+lượt. Câu nào user đã nói rõ / suy được từ context → tự chốt, chỉ nhắc lại 1 dòng "mình hiểu
+là …" để user kịp bắt lỗi; chỉ bung phỏng vấn ở nhánh mơ hồ hoặc chọn sai thì đắt.
 
 Từ ý tưởng + mục tiêu user kể, **đề xuất 1-2 loại video phù hợp kèm lý do** rồi mới hỏi
 phần còn thiếu. User thường chưa biết mình cần dạng gì — đó là việc của skill này:
@@ -22,9 +29,10 @@ phần còn thiếu. User thường chưa biết mình cần dạng gì — đó
 | B-roll, phong cảnh, mood, không lời | `story` không VO, mode `t2v`, chỉ nhạc nền |
 | Nhiều nền tảng cùng lúc | Làm bản gốc dài trước, đề xuất bản đồ repurpose 1→N |
 
-Sau khi user chọn, chốt 5 câu bắt buộc (thiếu thì hỏi — đừng đoán): **nền tảng đích** ·
-**tỉ lệ** (9:16 hay 16:9) · **thời lượng đích** · **người xem là ai** (persona cụ thể) ·
-**1 mục tiêu duy nhất**. Ghi `01_script/brief.md`. Preset:
+5 thông tin bắt buộc chốt qua phỏng vấn (KHÔNG hỏi dồn một lượt — theo thứ tự dependency ở
+`decision-grilling.md`): **1 mục tiêu duy nhất** (gốc) → **người xem là ai** (persona cụ thể)
+→ loại video → **nền tảng đích** → **tỉ lệ** (9:16 hay 16:9) → **thời lượng đích**. Thiếu thì
+hỏi (kèm đề xuất), đừng đoán. Ghi `01_script/brief.md`. Preset:
 - `story` — kể chuyện 2-6 phút, 10-30 cảnh, khung 3 hồi hoặc kishōtenketsu; năng lượng
   tùy mục tiêu (ru ngủ → đi xuống, giải trí → cao trào giữa).
 - `reel` — 20-60s, 4-8 cảnh; **hook 3 giây đầu** (1 lời hứa, open loop) → 1 value → 1 CTA.
@@ -39,28 +47,46 @@ hook + cấu trúc kể (3 hồi / kishōtenketsu): đọc `references/hook-and-
 Viết `01_script/kichban.md`: lời đọc (VO) tiếng Việt từng cảnh + mô tả hình ngắn.
 Câu ngắn, chủ động, đọc to lên nghe tự nhiên. **Cấm em-dash `—`** trong VO (tell AI tiếng Việt).
 
-## Bước 3 · Storyboard máy-đọc-được
+## Bước 3 · Storyboard máy-đọc-được (điền FIELD → compiler ghép prompt)
 
 Tạo `projects/<tên>/project.json` theo schema — **đọc `references/project-schema.md`
-trước khi viết file này** (quy tắc prompt, độ dài VO khớp duration, cách tách cảnh nằm ở đó).
-Điền: characters (desc chi tiết), scenes (vo + prompt EN + mode + duration + characters + angle).
+trước khi viết file này** (quy tắc field, độ dài VO khớp duration, cách tách cảnh, cơ chế compiler).
+Điền: `characters` (desc chi tiết), `locations` (nếu khoá bối cảnh), `style` chung, scenes.
 Mặc định `mode: "i2v"` (ảnh duyệt trước, rẻ) — cảnh thuần bối cảnh không nhân vật thì `t2v`.
-**Field craft (Mức 3):** điền `role` (hook/setup/turn/payoff/cta), `shot_size` (**đa dạng cỡ cảnh**
-giữa các cảnh liền kề), `camera_move` — rồi đưa vựng từ đó vào `prompt` theo công thức Veo 5 phần
-(cinematography + subject + action + context + style). Chi tiết: `../vidgen-clips/references/veo-prompt-craft.md`.
-Đặt `transition` từng cảnh theo CẢM XÚC của mạch kể (dissolve vào mơ, fadewhite tỉnh giấc,
-fade đoạn dịu, cut nhịp nhanh — bảng trong schema) — đẹp hơn hẳn 1 kiểu đồng loạt.
+
+**Cách viết mới — điền FIELD, KHÔNG viết prompt tay** (Mức 4): `prompt` là field DẪN XUẤT do
+compiler ghép. Mỗi cảnh điền:
+- `action` (hành động chính, **tiếng Anh** — nội dung compiler không tự bịa), `emotion` (cảm xúc
+  chủ đạo → auto-fill góc máy/ánh sáng/atmosphere theo `references/emotion-recipe.md`).
+- `shot_size` (**đa dạng cỡ cảnh** giữa các cảnh liền kề), `camera_angle`, `camera_move`, `lighting`,
+  `atmosphere`, `lens`, `sfx[]`, `dialogue[]` — cái nào để trống mà có `emotion` thì compiler tự điền.
+- Continuity: `location` (khoá bối cảnh), `screen_direction` (giữ mạch hướng), `match_cut_with`.
+- `role` (hook/setup/turn/payoff/cta), `transition` theo CẢM XÚC (dissolve vào mơ, fadewhite tỉnh
+  giấc, fade đoạn dịu, cut nhịp nhanh — bảng trong schema), đừng đồng loạt 1 kiểu.
+
+Rồi **ghép prompt tự động**:
+```bash
+PY=~/.venv/claude/bin/python; GEN=.agents/skills/vidgen-clips/scripts/flowgen.py
+$PY $GEN compile-prompts --project projects/<tên> --dry-run   # xem trước, chưa ghi
+$PY $GEN compile-prompts --project projects/<tên>             # ghi scenes[].prompt
+```
+Muốn viết prompt tay 1 cảnh → set `prompt_override: true` rồi ghi `prompt` (compiler bỏ qua cảnh đó).
+Cảnh báo "THIẾU LIỆU" = cảnh chưa có `action` lẫn `prompt` → bổ sung. Công thức 5 khối + vựng từ
+điện ảnh + continuity: `../vidgen-clips/references/veo-prompt-craft.md`.
 
 ## Bước 4 · Tự-QC rồi trình GATE 1 (script lock)
 
-Tự kiểm trước khi trình user (gate 1 — đã nhồi craft):
+Tự kiểm trước khi trình user (gate 1 — đã nhồi craft). **Chạy `compile-prompts` xong mới QC prompt:**
 ☐ **hook** rõ trong 3s (short) / 30s (long), có open loop ☐ cấu trúc mạch rõ (3 hồi / kishōtenketsu)
-☐ mỗi cảnh 1 ý, VO khớp ~duration ☐ prompt EN đủ chủ thể/camera/ánh sáng, style lặp nguyên văn
+☐ mỗi cảnh 1 ý, VO khớp ~duration ☐ prompt (đã compile) đủ 5 khối, style lặp nguyên văn, không cảnh "THIẾU LIỆU"
 ☐ đặc điểm nhân vật nhắc lại trong prompt ☐ **đa dạng cỡ cảnh** (shot_size không đơn điệu)
+☐ **continuity**: screen_direction nhất quán mạch, cảnh cùng bối cảnh trỏ đúng `location`
 ☐ không yêu cầu chữ trong hình ☐ không em-dash ☐ tổng thời lượng khớp brief ☐ **1 CTA** duy nhất.
 Trình user duyệt kịch bản + storyboard. User gật → set `gates.script_lock = true`. **Chưa gật thì KHÔNG gen gì cả.**
 
 ## Chạy lại / sửa
 
-Đã có `project.json` mà user muốn sửa → chỉ sửa cảnh liên quan; cảnh đã có clip `done`
-mà đổi `prompt`/`vo` thì reset `image.approved=false`, `clip.status="pending"` để stage sau gen lại đúng chỗ.
+Đã có `project.json` mà user muốn sửa → chỉ sửa **field craft** cảnh liên quan rồi chạy lại
+`compile-prompts` (idempotent, ghi đè prompt cảnh không `prompt_override`). Cảnh đã có clip `done`
+mà đổi field/`vo` thì reset `image.approved=false`, `clip.status="pending"` để stage sau gen lại đúng chỗ.
+Dự án Mức 3 cũ (prompt viết tay, chưa có field) vẫn chạy y nguyên — compiler giữ prompt cũ, không xoá.

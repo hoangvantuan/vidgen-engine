@@ -72,7 +72,15 @@ location anchor + character anchor cùng lúc làm ref (tổng ≤ 3 ref/prompt)
 
 ## Bước 3 · Clip thử (đốt credit NHỎ trước khi đốt LỚN)
 
-Gen thử 1 cảnh tiêu biểu có nhân vật (chọn cảnh giữa video, đủ đại diện):
+**Nguyên lý — clip thử là PHÉP THĂM DÒ NĂNG LỰC engine ở tầng đắt nhất, KHÔNG phải "cảnh đại diện trung bình".**
+Ranh giới ảnh→video có giả định ngầm nguy hiểm: *"ảnh T2I gen được thì clip I2V cũng gen được"* — **SAI**.
+Veo có safety/giới hạn riêng ở tầng VIDEO mà tầng ảnh không lộ (đã gặp: clip trẻ em + đói bị chặn
+`MEDIA_GENERATION_STATUS_FAILED` dù ảnh gen bình thường). Vì vậy **chọn cảnh RỦI RO CAO NHẤT của dự án
+làm clip thử** — nội dung nhạy cảm nhất (trẻ em/bạo lực/đau khổ/y tế) hoặc tương tác/chuyển động phức tạp nhất.
+Cảnh khó nhất qua được thì phần còn lại gần như chắc qua; nó chặn thì biết NGAY (1 credit) thay vì vỡ giữa
+batch (chục credit). Đừng chọn cảnh phong cảnh/tĩnh cho "chắc ăn" — chắc ăn kiểu đó là tự lừa.
+
+Gen thử cảnh rủi ro nhất có nhân vật:
 ```bash
 $PY $GEN scene-images --project projects/<tên> --scene <id>   # ảnh khung đầu, miễn phí
 # user ưng ảnh → set image.approved=true → gen thử 1 clip:

@@ -144,6 +144,9 @@ projects/<tên>/
 - 1 cảnh = 1 ý = 1 chuyển động chính, 4-10s. Cảnh không nhân vật → `mode: "t2v"`, bỏ `characters`.
 - `vo` mỗi cảnh nên đọc hết trong ~`duration` giây (tiếng Việt ~3-4 chữ/giây;
   cảnh 8s ≈ 24-30 chữ). Lệch nhiều thì khi ráp clip bị kéo/nén quá tay.
+- **`vo` PHẢI đủ dấu tiếng Việt** — TTS (consumer ở Stage 4) đọc nguyên văn field này; viết không dấu
+  ("nam ay toi") → giọng đọc SAI hoàn toàn. JSON là UTF-8 nên dấu an toàn, đừng né sang không dấu vì sợ
+  encoding. (Ranh giới producer→consumer: ràng buộc của TTS phải được giữ ngay tại lúc viết `vo`.)
 
 ## Field craft (Mức 3 — TÙY CHỌN, backward-compatible)
 
@@ -195,8 +198,12 @@ field có cấu trúc để (a) QC tự động, (b) auto-fill từ tri thức �
 - **`camera_angle`** — góc máy điện ảnh (eye_level/low/high/dutch/overhead/over_shoulder). ĐỪNG nhầm
   với `angle` (góc NHÂN VẬT để flowgen chọn anchor).
 - **`lighting` / `atmosphere` / `lens`** — preset điện ảnh; trống thì auto theo `emotion`.
-- **`sfx[]`** — hiệu ứng âm thanh named-text để Veo 3 sinh audio đồng bộ (vd "footsteps on gravel").
+- **`sfx[]`** — hiệu ứng âm thanh named-text (vd "footsteps on gravel"). **CONSUMER** (Stage 4): assemble
+  bỏ audio gốc Veo (hay lồng giọng-bịa tiếng Anh đè lời đọc), nên `sfx[]` được tiêu thụ qua đường riêng —
+  `gen_sfx.py` gen file SFX sạch từ `sfx[]` → `assemble.py --sfx auto` mix làm lớp thứ 3 dưới giọng. KHÔNG mồ côi.
 - **`dialogue[]`** — thoại NHÂN VẬT hiện trong hình (Veo lồng tiếng), tách khỏi `vo` (narration ElevenLabs).
+  ⚠️ **Hiện là METADATA-ONLY** — chưa có consumer ở Stage 4 (audio Veo bị bỏ). Điền để lưu ý đạo diễn, đừng
+  kỳ vọng nghe được thoại này ở bản ráp; cần thoại thì đưa vào `vo` hoặc gen riêng.
 
 **Nhóm continuity (scene) — chống 2 lỗi kinh điển của video AI ghép cảnh:**
 - **`screen_direction`** — hướng chuyển động trên khung (L2R/R2L/toward/away/static). AI hay tự đảo

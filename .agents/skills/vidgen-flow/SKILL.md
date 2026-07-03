@@ -11,6 +11,13 @@ chờ user duyệt. Song song thật sự (batch gen) nằm trong script Python 
 **Triết lý gate — đặt cổng ở chỗ sửa sai ĐẮT nhất:** chữ rẻ → ảnh miễn phí → video tốn
 credit → ráp tốn công. Chốt từng lớp trước khi trả tiền cho lớp sau.
 
+**Gate là điểm PHẢN BIỆN, không phải xin chữ ký** (chi tiết:
+`../vidgen-script/references/decision-grilling.md`): trước khi trình user ở mỗi gate, tự soi
+output ở góc *tìm lỗi* (đảo ngược: "cái này SAI kiểu gì mà mình đang bỏ qua?"), rồi **nêu
+1-2 rủi ro còn lại + hỏi thẳng**, đừng mở lời bằng "ổn rồi, duyệt nhé". Mọi quyết định hỏi
+user (loại video, giọng đọc…) đều theo cùng lối grilling: **từng câu một, kèm đề xuất, tự
+suy chỗ đã rõ**.
+
 ```
 Ý tưởng ─▶ STEP 1 vidgen-script ──🚦GATE 1 script lock
                  ─▶ STEP 2 vidgen-character (anchor + clip thử) ──🚦GATE 2 character lock
@@ -41,6 +48,9 @@ sau gate 1 bỏ qua STEP 2, mở luôn `character_lock` và ghi chú lý do.
 ## STEP 2 · Nhân vật — skill `vidgen-character`
 
 Char sheet (người duyệt) → anchors (máy bám) → **1 clip thử** (đốt credit nhỏ trước khi đốt lớn).
+Clip thử là **phép thăm dò năng lực engine ở tầng video** — chọn cảnh **RỦI RO CAO NHẤT** (nội dung nhạy
+cảm nhất, tương tác phức tạp nhất), KHÔNG phải cảnh trung bình: ranh giới ảnh→video có safety filter khác
+nhau, ảnh gen được ≠ clip gen được (xem `vidgen-character` Bước 3).
 **🚦 GATE 2:** trình sheet + anchors + clip thử (kiểm khớp anchor, không AI-tell). User gật → `gates.character_lock=true`.
 
 ## STEP 3 · Gen clip — skill `vidgen-clips` (tự chạy, không gate)
@@ -48,11 +58,16 @@ Char sheet (người duyệt) → anchors (máy bám) → **1 clip thử** (đ�
 `scene-images` (miễn phí) → user duyệt ảnh theo lô → **báo số clip sẽ gen ≈ số credit** →
 `scene-clips` (resume theo manifest, retry 1, failed không chặn batch). QC nhanh từng clip.
 Đây là điểm tiết kiệm nhất: mọi chỉnh sửa hình ảnh làm ở tầng ẢNH, đừng ở tầng VIDEO.
+Clip fail `MEDIA_GENERATION_STATUS_FAILED` = Veo chặn nội dung (hay gặp: trẻ em + đau khổ) → **mềm prompt**
+(bỏ `gaunt/frail/starving`, diễn khổ qua bối cảnh/trang phục) rồi gen lại; vẫn chặn → fallback Ken Burns từ
+ảnh (assemble tự làm). Bảng từ-trigger: `vidgen-clips/references/veo-prompt-craft.md`.
 
 ## STEP 4 · Ráp — skill `vidgen-assemble`
 
-TTS + **phụ đề karaoke** + timings → assemble (setpts khớp lời, auto-pick nhạc theo mood, ducking, end-card).
-**🚦 GATE 3:** trình final.mp4 + tự-QC (sub karaoke khớp, nhạc không đè giọng, hook mạnh, không cụt).
+TTS + **phụ đề karaoke** + timings → (tùy chọn `gen_sfx.py` gen SFX cảnh chủ chốt) → assemble (setpts khớp
+lời, auto-pick nhạc theo mood, ducking dịu, mix SFX layer, end-card). Muốn hiệu ứng âm thanh (gió, bước chân,
+trẻ cười) thì gen SFX vì assemble bỏ audio gốc Veo.
+**🚦 GATE 3:** trình final.mp4 + tự-QC (sub karaoke khớp, nhạc/ SFX không đè giọng, hook mạnh, không cụt).
 User gật → `gates.final_approved=true` → bàn giao.
 
 ## Xử lý lỗi (chung mọi stage)

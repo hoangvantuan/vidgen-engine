@@ -114,6 +114,29 @@ AI video mỗi cảnh gen độc lập → hay tự đảo hướng/nhảy setti
 Ranh giới rõ: `screen_direction`/`match_cut_with` là **continuity NỘI DUNG** (đưa vào prompt/lên kế
 hoạch cảnh); còn `transition.type` (xfade/dissolve) là **hiệu ứng BIÊN TẬP** ở Stage 4 — hai thứ khác nhau.
 
+## X · Ranh giới ảnh→video: nội dung engine chặn ở tầng VIDEO (không lộ ở tầng ảnh)
+
+**Nguyên lý:** tầng ảnh (T2I, rẻ) và tầng video (I2V/T2V, đắt) có **safety filter KHÁC nhau**. Ảnh gen
+được KHÔNG bảo đảm video gen được — đây là ranh giới có giả định ngầm hay gây vỡ batch. Triệu chứng khi
+bị chặn: `MEDIA_GENERATION_STATUS_FAILED` (khác lỗi `400 invalid argument` = tạm thời, gen lại là qua).
+
+**Vùng nội dung Veo hay chặn ở tầng video** (quan sát thực chiến, không phải danh sách chính thức):
+- **Trẻ em + đau khổ/suy kiệt thân thể** (đói, gầy trơ, bệnh, thương tích) — ca đã gặp và giải được.
+- Bạo lực rõ, máu me, vũ khí chĩa vào người, nội dung y tế cận cảnh, hành hạ.
+
+**Cách viết vượt (giữ được ý đồ, không né chủ đề):** diễn cái khổ qua **HOÀN CẢNH**, đừng tả **THÂN THỂ**.
+
+| Từ trigger (tránh trong prompt VIDEO) | Viết thay bằng |
+|---|---|
+| `gaunt`, `frail`, `emaciated`, `skeletal`, `starving` | quần áo vá rách, bối cảnh tiêu điều, biểu cảm buồn, bát ăn vơi |
+| `dying`, `suffering`, `agony`, `corpse` | ngồi lặng, ánh mắt xa xăm, khói hương, không gian trống |
+| động tác đau đớn cực đoan | cử chỉ dịu (ôm, chia sẻ, cúi đầu), thêm tông ấm/hiền |
+
+- Ảnh khung đầu (I2V input) cũng bị soi — nếu ảnh quá cực đoan, làm dịu ảnh trước, đừng chỉ sửa prompt.
+- **Fallback khi vẫn chặn:** ảnh gen được → dùng ảnh tĩnh + Ken Burns (assemble tự làm cho cảnh `failed`),
+  đừng để 1 cảnh chặn cả video. Xem `vidgen-assemble/SKILL.md` (fallback zoompan).
+- **Đặt bẫy này ở clip thử:** chọn cảnh rủi ro nhất làm clip thử (xem `vidgen-character` Bước 3) để lộ giới hạn SỚM.
+
 ## Map vào stage
 
 - **Storyboard (Stage 1):** điền field craft → `flowgen compile-prompts` ghép ra `scenes[].prompt`

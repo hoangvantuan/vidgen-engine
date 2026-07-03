@@ -19,6 +19,8 @@ Ví dụ:
   $PY flowgen.py scene-images --project projects/con-cao
   $PY flowgen.py scene-clips  --project projects/con-cao
 """
+from __future__ import annotations
+
 import argparse
 import asyncio
 import errno
@@ -91,21 +93,195 @@ def patch_scene(project_dir: Path, scene_id, key: str, value):
     save_manifest(project_dir, m)
 
 
+def _pick_anchor(anchors: list, angle: str):
+    """Chọn anchor đúng angle (có media_id), fallback anchor đầu có media_id."""
+    return next((a for a in anchors if a.get("angle") == angle and a.get("media_id")),
+                next((a for a in anchors if a.get("media_id")), None))
+
+
 def anchor_ids_for_scene(m: dict, scene: dict) -> list[str]:
-    """Gom media_id anchor của các nhân vật trong cảnh (tối đa 3 ref/prompt)."""
+    """Gom media_id anchor: NHÂN VẬT (theo angle) + BỐI CẢNH (location) — tối đa 3 ref/prompt.
+    Nhân vật ưu tiên trước (giữ danh tính); location anchor thêm để khoá bối cảnh nếu còn chỗ."""
     ids = []
     chars = {c["id"]: c for c in m.get("characters", [])}
     for cid in scene.get("characters", []):
         c = chars.get(cid)
         if not c:
             continue
-        angle = scene.get("angle", "front")
-        anchors = c.get("anchors", [])
-        pick = next((a for a in anchors if a.get("angle") == angle and a.get("media_id")),
-                    next((a for a in anchors if a.get("media_id")), None))
+        pick = _pick_anchor(c.get("anchors", []), scene.get("angle", "front"))
         if pick:
             ids.append(pick["media_id"])
+    lid = scene.get("location")
+    if lid:
+        loc = next((l for l in m.get("locations", []) if l.get("id") == lid), None)
+        if loc:
+            pick = _pick_anchor(loc.get("anchors", []), scene.get("location_angle", ""))
+            if pick and pick["media_id"] not in ids:
+                ids.append(pick["media_id"])
     return ids[:3]
+
+
+def extract_sharp_end_frame(video_path: str, out_png: str, window: int = 6) -> bool:
+    """FRAME-CHAINING: trích frame NÉT nhất trong ~window frame cuối clip → làm khung đầu cảnh sau.
+    Khung cuối clip AI hay motion-blur; chọn theo độ nét (Laplacian variance) để nối liền mạch mà
+    không bê frame mờ. Dùng cv2 (đã có trong venv). Trả True nếu ghi được ảnh."""
+    import cv2  # noqa: PLC0415 — import cục bộ, tránh phụ thuộc khi lệnh khác không cần
+    cap = cv2.VideoCapture(video_path)
+    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    if total <= 0:
+        cap.release()
+        return False
+    best, best_score = None, -1.0
+    for idx in range(max(0, total - window), total):
+        cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+        ok, frame = cap.read()
+        if not ok:
+            continue
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        score = float(cv2.Laplacian(gray, cv2.CV_64F).var())  # càng cao càng nét
+        if score > best_score:
+            best_score, best = score, frame
+    cap.release()
+    if best is None:
+        return False
+    Path(out_png).parent.mkdir(parents=True, exist_ok=True)
+    cv2.imwrite(out_png, best)
+    return True
+
+
+# ── prompt compiler (local, không tốn credit) ─────────────────────────────
+# Bảng emotion → recipe. Nguồn: references/emotion-recipe.md (6 công thức gốc CinematicHubClone
+# + 2 biến thể suy ra). Field để TRỐNG mới auto-fill; field điền tay luôn thắng.
+EMOTION_RECIPE = {
+    "fear":      {"camera_angle": "dutch", "shot_size": "close", "lighting": "low_key",
+                  "atmosphere": "fog", "kw": "chiaroscuro, ominous shadows, unsettling mood"},
+    "joy":       {"camera_angle": "eye_level", "shot_size": "wide", "lighting": "high_key",
+                  "atmosphere": "", "kw": "warm, vibrant, airy, clear sunny sky"},
+    "sadness":   {"camera_angle": "high", "shot_size": "wide", "lighting": "blue_hour",
+                  "atmosphere": "", "kw": "isolated, empty space, melancholic"},
+    "power":     {"camera_angle": "low", "shot_size": "medium", "lighting": "rembrandt",
+                  "atmosphere": "god_rays", "kw": "imposing, larger than life"},
+    "romance":   {"camera_angle": "eye_level", "shot_size": "close", "lighting": "golden_hour",
+                  "atmosphere": "", "kw": "warm glow, intimate, shallow depth of field"},
+    "chaos":     {"camera_angle": "dutch", "shot_size": "close", "lighting": "low_key",
+                  "atmosphere": "dust", "kw": "handheld, disorienting, no stable horizon"},
+    "calm":      {"camera_angle": "eye_level", "shot_size": "medium", "lighting": "soft",
+                  "atmosphere": "", "kw": "balanced, serene, gentle"},
+    "wonder":    {"camera_angle": "low", "shot_size": "establishing", "lighting": "golden_hour",
+                  "atmosphere": "god_rays", "kw": "awe, sweeping, luminous"},
+}
+# Alias cảm xúc → key chuẩn
+EMOTION_ALIAS = {"tension": "fear", "loneliness": "sadness", "melancholy": "sadness",
+                 "dominance": "power", "intimacy": "romance", "madness": "chaos"}
+
+_ANGLE = {"eye_level": "eye-level shot", "low": "low-angle shot", "high": "high-angle shot",
+          "dutch": "dutch angle", "overhead": "overhead shot", "over_shoulder": "over-the-shoulder shot"}
+_SHOT = {"wide": "wide shot", "medium": "medium shot", "close": "close-up",
+         "extreme_close": "extreme close-up", "establishing": "establishing wide shot"}
+_MOVE = {"static": "static camera", "push_in": "slow push-in", "pull_out": "slow pull-out",
+         "pan": "smooth pan", "tilt": "smooth tilt", "orbit": "orbiting camera",
+         "handheld": "handheld camera", "crane": "crane move"}
+_LIGHT = {"high_key": "high-key lighting", "low_key": "low-key lighting", "rembrandt": "Rembrandt lighting",
+          "silhouette": "silhouette lighting", "rim": "rim light", "golden_hour": "golden hour light",
+          "blue_hour": "blue hour light", "chiaroscuro": "chiaroscuro", "soft": "soft diffused light",
+          "hard": "hard directional light"}
+_ATMOS = {"rain": "gentle rain", "fog": "foggy atmosphere", "smoke": "thin smoke",
+          "god_rays": "volumetric god rays", "dust": "dust in the air", "snow": "falling snow",
+          "haze": "hazy air"}
+_LENS = {"wide_24": "24mm wide lens", "35mm": "shot on 35mm lens", "50mm": "50mm lens",
+         "85mm": "85mm portrait lens", "macro": "macro lens"}
+_DIR = {"L2R": "moving left to right", "R2L": "moving right to left",
+        "toward": "moving toward camera", "away": "moving away from camera", "static": ""}
+
+
+def _recipe(emotion):
+    e = str(emotion or "")
+    return EMOTION_RECIPE.get(EMOTION_ALIAS.get(e, e))
+
+
+def compile_scene_prompt(m: dict, s: dict) -> tuple[str | None, str]:
+    """Ghép prompt Veo từ field craft. Trả (prompt|None, note).
+    None = bỏ qua (override / thiếu liệu). Idempotent, emotion auto-fill field trống."""
+    if s.get("prompt_override"):
+        return None, "giữ nguyên (prompt_override — prompt viết tay)"
+    action = (s.get("action") or "").strip()
+    if not action:
+        # Không có action để ghép. Nếu có prompt tay (dự án Mức 3 cũ) → giữ, đừng xoá.
+        if (s.get("prompt") or "").strip():
+            return None, "giữ prompt cũ (thiếu 'action'; set prompt_override=true để chốt viết tay)"
+        return None, "THIẾU LIỆU: cả 'action' lẫn 'prompt' đều trống — không đủ để ghép"
+
+    rec = _recipe(s.get("emotion", "")) or {}
+    def pick(field):  # field tay thắng; trống thì lấy từ recipe theo emotion
+        return (s.get(field) or "").strip() or rec.get(field, "")
+
+    shot_size, camera_angle = pick("shot_size"), pick("camera_angle")
+    lighting, atmosphere = pick("lighting"), pick("atmosphere")
+    camera_move = (s.get("camera_move") or "").strip()
+    lens = (s.get("lens") or "").strip()
+    sdir = (s.get("screen_direction") or "").strip()
+
+    # [Cinematography]
+    cine = [_SHOT.get(shot_size, shot_size), _ANGLE.get(camera_angle, camera_angle),
+            _MOVE.get(camera_move, camera_move), _LENS.get(lens, lens), _DIR.get(sdir, sdir)]
+    cine = [x for x in cine if x]
+
+    # [Subject] — nhắc NGUYÊN VĂN desc nhân vật + thoại trong hình
+    chars = {c["id"]: c for c in m.get("characters", [])}
+    subj = [chars[cid]["desc"] for cid in s.get("characters", []) if cid in chars and chars[cid].get("desc")]
+    for d in s.get("dialogue", []) or []:
+        line = (d.get("line") or "").strip()
+        if line:
+            subj.append(f'the character says "{line}"')
+
+    # [Context] — khoá bối cảnh: lặp nguyên văn desc location
+    locs = {l["id"]: l for l in m.get("locations", [])}
+    context = ""
+    lid = s.get("location")
+    if lid and lid in locs and locs[lid].get("desc"):
+        context = locs[lid]["desc"]
+
+    # [Style & Ambiance] — style chung dự án + ánh sáng + atmosphere + keyword emotion + sfx
+    amb = [m.get("style", "").strip(), _LIGHT.get(lighting, lighting), _ATMOS.get(atmosphere, atmosphere),
+           rec.get("kw", "")]
+    for fx in s.get("sfx", []) or []:
+        if (fx or "").strip():
+            amb.append(f"audible {fx.strip()}")
+    amb = [x for x in amb if x]
+
+    parts = []
+    if cine:    parts.append(", ".join(cine))
+    if subj:    parts.append(", ".join(subj))
+    parts.append(action)
+    if context: parts.append(context)
+    if amb:     parts.append(", ".join(amb))
+    prompt = ". ".join(p.rstrip(". ") for p in parts if p) + "."
+    filled = [f for f in ("shot_size", "camera_angle", "lighting", "atmosphere")
+              if not (s.get(f) or "").strip() and rec.get(f)]
+    note = "compiled" + (f" (emotion auto-fill: {', '.join(filled)})" if filled else "")
+    return prompt, note
+
+
+async def cmd_compile_prompts(a):  # async để khớp dispatch asyncio.run; thân thuần local, không await
+    pdir = Path(a.project)
+    m = load_manifest(pdir)
+    changed, skipped, warned = [], [], []
+    for s in m.get("scenes", []):
+        if a.scene and s["id"] not in a.scene:
+            continue
+        prompt, note = compile_scene_prompt(m, s)
+        if prompt is None:
+            (warned if note.startswith("THIẾU") else skipped).append((s["id"], note))
+            continue
+        s["prompt"] = prompt
+        changed.append((s["id"], note))
+        print(f"— Cảnh {s['id']}: {note}\n    {prompt}")
+    if not a.dry_run and changed:
+        save_manifest(pdir, m)  # ghi atomic toàn manifest (đã cập nhật prompt các cảnh)
+    print(f"\nCompiled {len(changed)} | giữ nguyên {len(skipped)} | THIẾU LIỆU {len(warned)}"
+          + (" (DRY-RUN, chưa ghi)" if a.dry_run else ""))
+    for sid, note in warned:
+        print(f"  ⚠ cảnh {sid}: {note}")
 
 
 # ── bridge ────────────────────────────────────────────────────────────────
@@ -256,6 +432,8 @@ async def cmd_scene_clips(a):
     if not m.get("gates", {}).get("character_lock") and not a.force:
         raise SystemExit("Gate 2 (character_lock) chưa mở — duyệt anchor + clip thử trước, "
                          "hoặc chạy với --force nếu cố ý.")
+    prev_of = {m["scenes"][i]["id"]: (m["scenes"][i - 1] if i > 0 else None)
+               for i in range(len(m["scenes"]))}  # cảnh liền trước theo thứ tự manifest (cho frame-chain)
     todo = []
     for s in m["scenes"]:
         if a.scene and s["id"] not in a.scene:
@@ -263,14 +441,17 @@ async def cmd_scene_clips(a):
         if s.get("clip", {}).get("status") == "done" and not a.regen:
             continue
         mode = s.get("mode", "i2v")
-        if mode in ("i2v", "fl") and not s.get("image", {}).get("approved"):
+        # link_prev lấy khung từ cảnh trước → KHÔNG cần ảnh riêng đã duyệt
+        if mode in ("i2v", "fl") and not s.get("link_prev") and not s.get("image", {}).get("approved"):
             print(f"— Cảnh {s['id']}: ảnh chưa duyệt, bỏ qua.")
             continue
         todo.append(s)
     if not todo:
         print("Không có cảnh nào cần gen clip.")
         return
-    print(f"Sẽ gen {len(todo)} clip (TỐN credit). Resume: cảnh done sẽ không gen lại.")
+    chained = [s["id"] for s in todo if s.get("link_prev")]
+    print(f"Sẽ gen {len(todo)} clip (TỐN credit). Resume: cảnh done sẽ không gen lại."
+          + (f" Frame-chain (tuần tự): {chained}" if chained else ""))
     bridge = await open_bridge()
     try:
         for s in todo:
@@ -278,11 +459,34 @@ async def cmd_scene_clips(a):
             out = pdir / "04_clips" / f"scene{s['id']:02d}.mp4"
             kwargs = dict(project_id=m.get("flow_project_id") or DEFAULT_PROJECT)
             if mode in ("i2v", "fl"):
-                kwargs["image_id"] = s["image"]["media_id"]
+                kwargs["image_id"] = s.get("image", {}).get("media_id")
             if mode == "fl":
                 kwargs["end_id"] = s.get("end_image", {}).get("media_id")
             if mode == "r2v":
                 kwargs["ref_ids"] = anchor_ids_for_scene(m, s)
+            # ── FRAME-CHAINING: khung cuối NÉT của cảnh trước → khung đầu cảnh này ──
+            if s.get("link_prev") and mode in ("i2v", "fl"):
+                prev = prev_of.get(s["id"])
+                prev_clip = None
+                if prev:
+                    pf = prev.get("clip", {}).get("file") or f"04_clips/scene{prev['id']:02d}.mp4"
+                    cand = pdir / pf
+                    if cand.exists() and cand.stat().st_size > 0:
+                        prev_clip = cand
+                cf = None
+                if prev_clip:
+                    frame_png = pdir / "03_images" / f"scene{s['id']:02d}_chain.png"
+                    if extract_sharp_end_frame(str(prev_clip), str(frame_png)):
+                        cf = await upload_image(bridge, str(frame_png), kwargs["project_id"])
+                if cf:
+                    kwargs["image_id"] = cf
+                    print(f"— Cảnh {s['id']}: ↪ frame-chain từ khung cuối nét cảnh "
+                          f"{prev['id'] if prev else '?'}")
+                elif not kwargs.get("image_id"):
+                    print(f"— Cảnh {s['id']}: link_prev nhưng THIẾU clip cảnh trước + không ảnh riêng → bỏ qua.")
+                    continue
+                else:
+                    print(f"— Cảnh {s['id']}: link_prev fail (thiếu clip trước) → fallback ảnh riêng.")
             mid = None
             for attempt in (1, 2):  # retry 1 lần theo chính sách lỗi
                 print(f"— Cảnh {s['id']} [{mode}] lần {attempt}…")
@@ -336,6 +540,12 @@ def main():
     p.add_argument("--no-clean", action="store_true", help="không xóa watermark")
     p.add_argument("--project-id", default=DEFAULT_PROJECT)
     p.set_defaults(fn=cmd_clip)
+
+    p = sub.add_parser("compile-prompts", help="ghép scenes[].prompt từ field craft (local, miễn phí)")
+    p.add_argument("--project", required=True, help="thư mục dự án chứa project.json")
+    p.add_argument("--scene", type=int, nargs="*", help="chỉ các cảnh này")
+    p.add_argument("--dry-run", dest="dry_run", action="store_true", help="in prompt ra, KHÔNG ghi manifest")
+    p.set_defaults(fn=cmd_compile_prompts)
 
     p = sub.add_parser("scene-images", help="batch gen ảnh khung đầu theo project.json")
     p.add_argument("--project", required=True, help="thư mục dự án chứa project.json")

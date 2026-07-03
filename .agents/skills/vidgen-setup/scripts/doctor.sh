@@ -57,18 +57,27 @@ for p in 9222 8100; do lsof -nP -iTCP:$p -sTCP:LISTEN >/dev/null 2>&1 && BUSY="$
 if [ -z "$BUSY" ]; then ok "Port 9222/8100 rảnh (bridge sẵn sàng)"
 else warn "Port$BUSY đang bận" "Script flow-agent khác đang chạy. Nhớ: bridge=8100, FastAPI=8000 — đừng nhầm. Kill nếu là tiến trình treo: lsof -nP -iTCP:9222 -sTCP:LISTEN"; fi
 
-# 6. ELEVENLABS_API_KEY — phải EXPORT (tiến trình con Python mới thấy; env chỉ liệt kê biến đã export)
-if env | grep -q '^ELEVENLABS_API_KEY='; then
-  TIER=$(curl -s -m 8 -H "xi-api-key: $ELEVENLABS_API_KEY" https://api.elevenlabs.io/v1/user/subscription 2>/dev/null | grep -o '"tier":"[^"]*"' | cut -d'"' -f4)
+# 6. ELEVENLABS_API_KEY — phân biệt 3 trạng thái gần-giống: chưa-set / set-chưa-export / export-OK.
+#    NHÂN thật: doctor chạy bằng `bash`, KHÔNG tự load ~/.zshenv (của zsh) → phải hỏi qua zsh,
+#    nếu không sẽ false-negative "chưa set" trong khi shell thật (zsh) có biến.
+KEY_VAL=""; KEY_ENV=""
+if command -v zsh >/dev/null 2>&1; then
+  KEY_VAL=$(zsh -c 'source ~/.zshenv 2>/dev/null; source ~/.zshrc 2>/dev/null; print -rn -- $ELEVENLABS_API_KEY' 2>/dev/null)
+  KEY_ENV=$(zsh -c 'source ~/.zshenv 2>/dev/null; source ~/.zshrc 2>/dev/null; printenv ELEVENLABS_API_KEY' 2>/dev/null)
+fi
+[ -z "$KEY_VAL" ] && KEY_VAL="$ELEVENLABS_API_KEY"
+[ -z "$KEY_ENV" ] && env | grep -q '^ELEVENLABS_API_KEY=' && KEY_ENV="$ELEVENLABS_API_KEY"
+if [ -n "$KEY_ENV" ]; then
+  TIER=$(curl -s -m 8 -H "xi-api-key: $KEY_ENV" https://api.elevenlabs.io/v1/user/subscription 2>/dev/null | grep -o '"tier":"[^"]*"' | cut -d'"' -f4)
   case "$TIER" in
-    "")     warn "ELEVENLABS_API_KEY có nhưng không kiểm được tier" "Mạng/proxy? Thử: curl -H \"xi-api-key: \$ELEVENLABS_API_KEY\" https://api.elevenlabs.io/v1/user/subscription" ;;
+    "")     warn "ELEVENLABS_API_KEY đã export nhưng không kiểm được tier" "Mạng/proxy? Thử: curl -H \"xi-api-key: \$ELEVENLABS_API_KEY\" https://api.elevenlabs.io/v1/user/subscription" ;;
     "free") warn "ElevenLabs tier FREE" "Free hay bị chặn TTS (401 detected_unusual_activity) — cần gói trả phí để làm giọng đọc ổn định" ;;
-    *)      ok "ELEVENLABS_API_KEY hợp lệ (tier: $TIER)" ;;
+    *)      ok "ELEVENLABS_API_KEY đã export, hợp lệ (tier: $TIER)" ;;
   esac
-elif [ -n "$ELEVENLABS_API_KEY" ]; then
-  warn "ELEVENLABS_API_KEY có nhưng CHƯA export" "Shell thấy nhưng tiến trình con (Python) sẽ KeyError. Thêm 'export ELEVENLABS_API_KEY=...' vào ~/.zshenv rồi mở shell mới."
+elif [ -n "$KEY_VAL" ]; then
+  warn "ELEVENLABS_API_KEY có trong shell nhưng CHƯA export" "Python (tiến trình con) sẽ KeyError dù shell thấy. Sửa GỐC: đổi dòng trong ~/.zshenv thành 'export ELEVENLABS_API_KEY=...'. Tạm thời: chạy 'export ELEVENLABS_API_KEY' đầu mỗi lệnh."
 else
-  warn "Chưa set ELEVENLABS_API_KEY" "Chỉ cần khi video có lời đọc. Set trong ~/.zshenv (nhớ export) hoặc dùng skill setup-api-key. Mỗi Bash là shell mới — set xong phải export."
+  warn "Chưa set ELEVENLABS_API_KEY" "Chỉ cần khi video có lời đọc. Set trong ~/.zshenv (nhớ 'export') hoặc dùng skill setup-api-key."
 fi
 
 # 7. Font tiếng Việt cho sub (bundle trong vidgen-assemble)
