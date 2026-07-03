@@ -68,6 +68,26 @@ archetype, dán keyword mồi vào `style` project-level → mọi cảnh thừa
 khổng lồ cạnh người) → dựng sẵn tỉ lệ đó trong **location anchor** (Grid Method, xem vidgen-character
 Bước 2b); Veo neo giữ. Chỉ dùng prompt keyword thì scale có thể trôi giữa các cảnh.
 
+## 2c · Style reference phải CỤ THỂ — neo ở `style` project-level, KHÔNG rải per-scene
+
+Bằng chứng (verify): từ mô tả style **mơ hồ** ("cinematic", "high quality", "professional", "4k",
+"masterpiece") model **không đổi output** — chúng là nhiễu. Model chỉ phản hồi **neo cụ thể**:
+- **Camera body / ống kính:** `"shot on Arri Alexa"`, `"shot on iPhone 15 Pro"`, `"35mm film grain"`,
+  `"anamorphic lens flare"`.
+- **Director / DoP style:** `"Wes Anderson style"`, `"David Fincher style"`, `"Roger Deakins cinematography"`.
+- **Color grade tường minh:** `"teal and orange grade"`, `"golden hour grade"`, `"desaturated cold grade"`,
+  `"high-contrast noir"`.
+
+**Ranh giới — neo Ở ĐÂU (quan trọng nhất):** style-reference đặt look TOÀN video → phải nằm ở field
+**`style` project-level**, để `compile-prompts` **lặp NGUYÊN VĂN vào mọi cảnh** (xem §1). Rải camera
+body / director / grade **lẻ theo từng cảnh** = mỗi cảnh một look → **phá nhất quán** (lỗi kinh điển
+video AI ghép cảnh, §6). Cảnh phá lệ có chủ đích → dùng `prompt_override`, KHÔNG sửa lẻ `style`.
+
+**Luật vague-term:** từ mơ hồ ("cinematic", "photorealistic"…) chỉ dùng khi **KÈM ≥1 neo cụ thể**
+(camera body / grade / director). Đứng một mình thì **bỏ** — nó chiếm chỗ prompt mà không điều khiển gì.
+→ Sửa lại các mô tả kiểu "cinematic, photorealistic" ở §2: giữ nếu đã có neo cụ thể đi kèm trong `style`,
+bỏ nếu đứng trơn.
+
 ## 3 · Âm thanh sinh cùng video (Veo 3)
 
 Bằng chứng (confidence cao, nguồn chính thức): Veo 3 **sinh audio đồng bộ ngay từ text prompt** —

@@ -24,6 +24,8 @@ Manifest là NGUỒN SỰ THẬT duy nhất về trạng thái dự án. Script 
 
   "style": "",                          // (tùy chọn) STYLE CHUNG toàn dự án — art style + palette + medium/lens
                                         // vd "3d donghua style, warm cinematic grading, shot on 35mm, 8k".
+                                        // DÙNG NEO CỤ THỂ (camera body/director/color grade), tránh vague
+                                        // "cinematic/high quality/professional" đứng trơn — xem veo-prompt-craft §2c.
                                         // Kèm QUY ƯỚC SCALE ở đây (tỉ lệ vật-với-vật do THẾ GIỚI quyết, không bắt
                                         // buộc chuẩn đời thực): chọn 1 archetype (true_to_life/heroic/monumental/
                                         // storybook/hero_product) → dán keyword mồi. Bảng: vidgen-clips/references/
