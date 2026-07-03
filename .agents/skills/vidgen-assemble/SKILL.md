@@ -20,16 +20,22 @@ Cần `ELEVENLABS_API_KEY` (thiếu → skill setup-api-key). Chọn voice cùng
 ```bash
 $PY $SK/tts_to_ass.py --project projects/<tên> --voice <VOICE_ID>
 ```
-Đọc VO mọi cảnh từ manifest → xuất `05_audio/narration.mp3` + `subs.ass` (khớp giọng,
-font Be Vietnam Pro, nằm trong safe-zone 9:16) + `timings.json` (khoảng thời gian từng cảnh).
+Đọc VO mọi cảnh từ manifest → xuất `05_audio/narration.mp3` + `subs.ass` + `timings.json`.
+**Phụ đề mặc định KARAOKE word-level** (tô sáng chạy theo từng chữ, dùng timestamp ElevenLabs sẵn
+có), font Be Vietnam Pro, safe-zone 9:16. Tùy chọn: `--plain` (sub tĩnh), `--highlight cyan|yellow`,
+`--max-words 5`. Quy ước styling + lý do — LƯU Ý karaoke là quy ước DỄ ĐỌC, KHÔNG hứa số retention
+(số liệu phụ đề→retention đã bị research bác): `references/caption-and-audio.md`.
 Video không lời đọc → bỏ bước này, khi ráp mỗi cảnh giữ đúng `duration`.
 Nghe thử narration trước khi ráp — giọng đọc sai thì sửa VO/đổi voice ngay, đừng để tới final.
 
 ## Bước 2 · Ráp
 
 ```bash
-$PY $SK/assemble.py --project projects/<tên> --bgm nhac.mp3 --endcard cta.png
+$PY $SK/assemble.py --project projects/<tên> --endcard cta.png   # nhạc tự chọn theo music.mood
 ```
+**Nhạc nền** (ưu tiên): `--bgm file` > `music.file` manifest > auto-pick theo `music.mood` từ
+`assets/bgm/` (đổi thư mục bằng `--bgm-dir`; thả nhạc theo README ở đó). Ducking đã chỉnh chuẩn
+mixing (ratio 4:1, attack 15ms) — nhạc lùi dưới giọng.
 Làm gì: mỗi clip cover-crop đúng khung (Flow trả 720×1280, tự scale lên) + bỏ audio gốc Veo
 + retime khớp `timings.json` (clip DÀI hơn đích → cắt giữ tốc độ thật; NGẮN hơn → làm chậm
 mượt bằng setpts — không freeze, không giật) → nối → burn sub → nhạc nền ducking theo giọng
@@ -44,8 +50,9 @@ Tùy chọn: `--no-burn` xuất KIT (base sạch + sub rời) giao CapCut · `--
 
 ## Bước 3 · GATE 3 (final review)
 
-Trình user bản final + tự-QC: ☐ sub khớp giọng, không tràn safe-zone ☐ chuyển cảnh khớp lời
-☐ nhạc không đè giọng ☐ không cụt đuôi ☐ đúng aspect/nền tảng đích.
+Trình user bản final + tự-QC (gate 3 — craft âm thanh/phụ đề, xem `references/caption-and-audio.md`):
+☐ sub karaoke khớp giọng, 4-6 chữ, trong safe-zone ☐ chuyển cảnh khớp cảm xúc/lời
+☐ nhạc ducking không đè giọng ☐ hook mở đầu mạnh ☐ không cụt đuôi ☐ đúng aspect/nền tảng đích.
 User gật → set `gates.final_approved = true`. Chê chỗ nào sửa đúng chỗ đó:
 - Sai lời/giọng → sửa VO trong manifest → chạy lại từ Bước 1 (clip giữ nguyên).
 - Clip xấu → quay lại vidgen-clips gen đúng cảnh đó → chỉ chạy lại Bước 2.

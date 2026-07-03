@@ -30,8 +30,8 @@ ffmpeg ráp dựng.
 | **vidgen-flow** | Orchestrator: nhận ý tưởng, đi 4 stage, dừng ở 3 gate, resume dự án cũ |
 | **vidgen-script** | Tư vấn loại video phù hợp → brief → kịch bản → storyboard `project.json` |
 | **vidgen-character** | Char sheet (người duyệt) → anchor (máy bám) → clip thử → character lock |
-| **vidgen-clips** | `flowgen.py`: T2I/I2V/T2V/R2V/FL batch qua omniflash, poll + tải + xóa watermark + resume |
-| **vidgen-assemble** | `tts_to_ass.py` (TTS timestamp → sub khớp giọng + timings) + `assemble.py` (retime khớp lời, xfade theo cảm xúc, ducking, Ken Burns fallback) |
+| **vidgen-clips** | `flowgen.py`: T2I/I2V/T2V/R2V/FL/**V2V** batch qua omniflash, poll + tải + xóa watermark + resume (v2v = sửa clip khỏi gen lại) |
+| **vidgen-assemble** | `tts_to_ass.py` (TTS timestamp → **phụ đề karaoke word-level** + timings) + `assemble.py` (retime khớp lời, xfade theo cảm xúc, **auto-pick nhạc theo mood** + ducking chuẩn, Ken Burns fallback) |
 | **vidgen-setup** | `doctor.sh` khám môi trường + hướng dẫn cài từng thứ |
 
 ## Cài đặt
@@ -74,22 +74,22 @@ PY=~/.venv/claude/bin/python
 $PY .agents/skills/vidgen-clips/scripts/flowgen.py t2i --prompt "..." --out anh.png     # ảnh, miễn phí
 $PY .agents/skills/vidgen-clips/scripts/flowgen.py scene-images --project projects/x    # ảnh các cảnh
 $PY .agents/skills/vidgen-clips/scripts/flowgen.py scene-clips  --project projects/x    # clip (tốn credit)
-$PY .agents/skills/vidgen-assemble/scripts/tts_to_ass.py --project projects/x --voice VOICE_ID
-$PY .agents/skills/vidgen-assemble/scripts/assemble.py  --project projects/x --bgm nhac.mp3
+$PY .agents/skills/vidgen-assemble/scripts/tts_to_ass.py --project projects/x --voice VOICE_ID  # sub karaoke
+$PY .agents/skills/vidgen-assemble/scripts/assemble.py  --project projects/x   # nhạc tự chọn theo music.mood
 ```
 
 ## Cấu trúc repo
 
 ```
 vidgen-engine/
-├── .agents/skills/    # 6 skill vidgen-* (flow/script/character/clips/assemble/setup)
+├── .agents/skills/    # 6 skill vidgen-* (flow/script/character/clips/assemble/setup) + references/ craft
 ├── .claude/skills     # symlink → ../.agents/skills (để Claude Code nhận skill)
 ├── omniflash/         # engine gen (Python) — bundle từ flow-agent, nói chuyện với extension
 ├── extension/         # Chrome extension Flow Agent — load unpacked vào Chrome
 ├── cli/               # CLI + API server gốc của flow-agent (python -m cli.generate / cli.api / cli.sniff)
 ├── requirements.txt   # deps engine (websockets, opencv, numpy)
 ├── vidgen.config.json # override trỏ flow-agent ngoài (rỗng = dùng bundle)
-├── docs/flow-agent/   # tài liệu gốc flow-agent (README đầy đủ flag, SNIFFING khi Flow đổi API, error.md)
+├── assets/bgm/        # thư viện nhạc nền theo mood (tự thả nhạc royalty-free — xem README trong đó)
 └── projects/          # các dự án video (tự tạo khi chạy, không commit — xem .gitignore)
 ```
 

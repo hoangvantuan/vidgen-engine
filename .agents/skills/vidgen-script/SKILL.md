@@ -29,6 +29,11 @@ Sau khi user chọn, chốt 5 câu bắt buộc (thiếu thì hỏi — đừng 
   tùy mục tiêu (ru ngủ → đi xuống, giải trí → cao trào giữa).
 - `reel` — 20-60s, 4-8 cảnh; **hook 3 giây đầu** (1 lời hứa, open loop) → 1 value → 1 CTA.
 
+**Thiết kế HOOK (bắt buộc — nơi giữ/mất người xem):** short-form quyết trong **~3 giây**, long-form
+tụt mạnh nhất **15-30s** đầu (YouTube đo intro = % còn xem sau 30s). Điền khối `hook`
+(`promise`/`first_frame`/`spoken`) trong manifest; đặt câu VO mạnh nhất + frame tò mò LÊN ĐẦU. Mẫu
+hook + cấu trúc kể (3 hồi / kishōtenketsu): đọc `references/hook-and-structure.md`.
+
 ## Bước 2 · Kịch bản cho người đọc
 
 Viết `01_script/kichban.md`: lời đọc (VO) tiếng Việt từng cảnh + mô tả hình ngắn.
@@ -40,15 +45,19 @@ Tạo `projects/<tên>/project.json` theo schema — **đọc `references/projec
 trước khi viết file này** (quy tắc prompt, độ dài VO khớp duration, cách tách cảnh nằm ở đó).
 Điền: characters (desc chi tiết), scenes (vo + prompt EN + mode + duration + characters + angle).
 Mặc định `mode: "i2v"` (ảnh duyệt trước, rẻ) — cảnh thuần bối cảnh không nhân vật thì `t2v`.
+**Field craft (Mức 3):** điền `role` (hook/setup/turn/payoff/cta), `shot_size` (**đa dạng cỡ cảnh**
+giữa các cảnh liền kề), `camera_move` — rồi đưa vựng từ đó vào `prompt` theo công thức Veo 5 phần
+(cinematography + subject + action + context + style). Chi tiết: `../vidgen-clips/references/veo-prompt-craft.md`.
 Đặt `transition` từng cảnh theo CẢM XÚC của mạch kể (dissolve vào mơ, fadewhite tỉnh giấc,
 fade đoạn dịu, cut nhịp nhanh — bảng trong schema) — đẹp hơn hẳn 1 kiểu đồng loạt.
 
 ## Bước 4 · Tự-QC rồi trình GATE 1 (script lock)
 
-Tự kiểm trước khi trình user:
+Tự kiểm trước khi trình user (gate 1 — đã nhồi craft):
+☐ **hook** rõ trong 3s (short) / 30s (long), có open loop ☐ cấu trúc mạch rõ (3 hồi / kishōtenketsu)
 ☐ mỗi cảnh 1 ý, VO khớp ~duration ☐ prompt EN đủ chủ thể/camera/ánh sáng, style lặp nguyên văn
-☐ đặc điểm nhân vật nhắc lại trong prompt ☐ không yêu cầu chữ trong hình ☐ không em-dash
-☐ tổng thời lượng khớp brief ☐ preset reel: hook 3s + CTA.
+☐ đặc điểm nhân vật nhắc lại trong prompt ☐ **đa dạng cỡ cảnh** (shot_size không đơn điệu)
+☐ không yêu cầu chữ trong hình ☐ không em-dash ☐ tổng thời lượng khớp brief ☐ **1 CTA** duy nhất.
 Trình user duyệt kịch bản + storyboard. User gật → set `gates.script_lock = true`. **Chưa gật thì KHÔNG gen gì cả.**
 
 ## Chạy lại / sửa

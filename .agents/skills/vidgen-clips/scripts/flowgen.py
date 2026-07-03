@@ -7,7 +7,8 @@
 Subcommands:
   t2i           Gen ảnh từ prompt (kèm --ref media_id để giữ nhất quán nhân vật)
   upload-image  Upload ảnh local → media_id
-  clip          Gen 1 clip (mode t2v/i2v/r2v/fl) + poll + tải + xóa watermark
+  clip          Gen 1 clip (mode t2v/i2v/r2v/fl/v2v) + poll + tải + xóa watermark
+                (v2v = SỬA clip đã có, khỏi gen lại: --video-id <media_id> hoặc --video-file <local>)
   scene-images  Batch: gen ảnh khung đầu cho các cảnh chưa có ảnh (đọc project.json)
   scene-clips   Batch: I2V các cảnh đã duyệt ảnh, resume theo manifest, retry 1 lần
 
@@ -49,8 +50,8 @@ REPO = _find_flow_agent()
 sys.path.insert(0, str(REPO))
 
 from omniflash import (  # noqa: E402
-    ASPECTS, DEFAULT_PROJECT, ExtensionBridge,
-    download_video, generate_video, generate_video_i2v, poll_status, upload_image,
+    ASPECTS, DEFAULT_PROJECT, ExtensionBridge, download_video, edit_video,
+    generate_video, generate_video_i2v, poll_status, upload_image, upload_video,
 )
 from omniflash.generators.i2v import generate_video_fl, generate_video_r2v  # noqa: E402
 from omniflash.generators.t2i import download_image, generate_image  # noqa: E402
@@ -101,8 +102,8 @@ async def open_bridge(timeout: int = 90) -> ExtensionBridge:
 
 async def gen_and_fetch_clip(bridge, mode: str, prompt: str, aspect_key: str,
                              duration: int, out_path: str, *, image_id=None,
-                             end_id=None, ref_ids=None, project_id=DEFAULT_PROJECT,
-                             clean: bool = True):
+                             end_id=None, ref_ids=None, video_id=None,
+                             project_id=DEFAULT_PROJECT, clean: bool = True):
     """Gen 1 clip theo mode, poll tới xong, tải về, xóa watermark. Trả path hoặc None."""
     aspect = ASPECTS.get(aspect_key, aspect_key)
     if mode == "i2v":
@@ -115,6 +116,9 @@ async def gen_and_fetch_clip(bridge, mode: str, prompt: str, aspect_key: str,
     elif mode == "r2v":
         mids = await generate_video_r2v(bridge, prompt, aspect, project_id,
                                         ref_media_ids=ref_ids or [], duration=duration)
+    elif mode == "v2v":
+        mids = await edit_video(bridge, prompt, aspect, project_id,
+                                video_media_id=video_id, duration=duration)
     else:  # t2v
         mids = await generate_video(bridge, prompt, aspect, project_id,
                                     duration=duration, count=1)
@@ -169,9 +173,18 @@ async def cmd_upload_image(a):
 async def cmd_clip(a):
     bridge = await open_bridge()
     try:
+        video_id = a.video_id
+        if a.mode == "v2v" and not video_id:
+            if not a.video_file:
+                raise SystemExit("Mode v2v cần --video-id (media_id có sẵn) hoặc --video-file (upload local).")
+            data = await upload_video(a.video_file, a.project_id, bridge)
+            video_id = (data.get("mediaId") or data.get("name")
+                        or (data.get("media") or {}).get("name"))
+            if not video_id:
+                raise SystemExit("Upload video thất bại — không lấy được media_id.")
         mid = await gen_and_fetch_clip(
             bridge, a.mode, a.prompt, a.aspect, a.duration, a.out,
-            image_id=a.image_id, end_id=a.end_id, ref_ids=a.ref,
+            image_id=a.image_id, end_id=a.end_id, ref_ids=a.ref, video_id=video_id,
             project_id=a.project_id, clean=not a.no_clean)
         if not mid:
             raise SystemExit("Gen clip thất bại.")
@@ -284,13 +297,15 @@ def main():
     p.set_defaults(fn=cmd_upload_image)
 
     p = sub.add_parser("clip", help="gen 1 clip (TỐN credit)")
-    p.add_argument("--mode", choices=["t2v", "i2v", "r2v", "fl"], required=True)
+    p.add_argument("--mode", choices=["t2v", "i2v", "r2v", "fl", "v2v"], required=True)
     p.add_argument("--prompt", required=True)
     p.add_argument("--aspect", default="portrait", help="portrait/landscape")
     p.add_argument("--duration", type=int, default=8, choices=[4, 6, 8, 10])
     p.add_argument("--image-id", help="media_id ảnh đầu (i2v/fl)")
     p.add_argument("--end-id", help="media_id ảnh cuối (fl)")
     p.add_argument("--ref", nargs="*", help="media_id ảnh tham chiếu (r2v)")
+    p.add_argument("--video-id", dest="video_id", help="media_id video nguồn (v2v — sửa clip đã có)")
+    p.add_argument("--video-file", dest="video_file", help="video local upload rồi sửa (v2v)")
     p.add_argument("--out", default="clip.mp4")
     p.add_argument("--no-clean", action="store_true", help="không xóa watermark")
     p.add_argument("--project-id", default=DEFAULT_PROJECT)

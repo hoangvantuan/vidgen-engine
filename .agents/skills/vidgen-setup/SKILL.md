@@ -26,6 +26,8 @@ thiếu ELEVENLABS_API_KEY vẫn làm được video không lời).
    bằng tài khoản Google có gói AI Pro → icon extension hiện **badge XANH** = connected.
    (Tab Flow tự mở khi chạy lệnh — không cần quản lý tab.)
 3. **Credit Flow**: xem số credit còn lại trong Flow UI — video tốn credit, ảnh thì không.
+4. **(Tùy chọn) Nhạc nền**: thả nhạc royalty-free vào `assets/bgm/<mood>/` để assemble tự chọn
+   theo `music.mood` (xem `assets/bgm/README.md`). Bỏ qua nếu video không nhạc hoặc tự truyền `--bgm`.
 
 ## Bước 3 · Xác minh sống (tùy chọn, tốn 0 credit)
 

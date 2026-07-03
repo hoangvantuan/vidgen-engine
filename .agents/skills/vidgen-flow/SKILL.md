@@ -31,16 +31,17 @@ credit → ráp tốn công. Chốt từng lớp trước khi trả tiền cho l
 
 ## STEP 1 · Kịch bản — skill `vidgen-script`
 
-Tư vấn LOẠI video phù hợp trước (bảng gợi ý trong vidgen-script) → brief 5 câu → kịch bản
-→ `project.json` (schema trong vidgen-script/references/).
-**🚦 GATE 1:** trình kịch bản + storyboard. User gật → `gates.script_lock=true`.
+Tư vấn LOẠI video phù hợp trước (bảng gợi ý trong vidgen-script) → **thiết kế hook mở đầu** →
+brief 5 câu → kịch bản → `project.json` (schema + references craft trong vidgen-script/).
+**🚦 GATE 1:** trình kịch bản + storyboard (kiểm hook 3s/30s, cấu trúc kể, đa dạng cỡ cảnh, 1 CTA).
+User gật → `gates.script_lock=true`.
 Chưa gật → KHÔNG đụng tới gen. Video không nhân vật cố định (phong cảnh, b-roll) →
 sau gate 1 bỏ qua STEP 2, mở luôn `character_lock` và ghi chú lý do.
 
 ## STEP 2 · Nhân vật — skill `vidgen-character`
 
 Char sheet (người duyệt) → anchors (máy bám) → **1 clip thử** (đốt credit nhỏ trước khi đốt lớn).
-**🚦 GATE 2:** trình sheet + anchors + clip thử. User gật → `gates.character_lock=true`.
+**🚦 GATE 2:** trình sheet + anchors + clip thử (kiểm khớp anchor, không AI-tell). User gật → `gates.character_lock=true`.
 
 ## STEP 3 · Gen clip — skill `vidgen-clips` (tự chạy, không gate)
 
@@ -50,8 +51,9 @@ Char sheet (người duyệt) → anchors (máy bám) → **1 clip thử** (đ�
 
 ## STEP 4 · Ráp — skill `vidgen-assemble`
 
-TTS + sub + timings → assemble (setpts khớp lời, ducking, end-card).
-**🚦 GATE 3:** trình final.mp4 + kết quả tự-QC. User gật → `gates.final_approved=true` → bàn giao.
+TTS + **phụ đề karaoke** + timings → assemble (setpts khớp lời, auto-pick nhạc theo mood, ducking, end-card).
+**🚦 GATE 3:** trình final.mp4 + tự-QC (sub karaoke khớp, nhạc không đè giọng, hook mạnh, không cụt).
+User gật → `gates.final_approved=true` → bàn giao.
 
 ## Xử lý lỗi (chung mọi stage)
 

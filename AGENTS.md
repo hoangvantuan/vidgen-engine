@@ -10,6 +10,8 @@ Chỉnh video có sẵn (cắt, transcribe, color) → skill `video-use` (ngoài
 **Quy ước:**
 - Dự án video: `projects/<tên>/` + manifest `project.json`
   (schema: `.agents/skills/vidgen-script/references/project-schema.md`).
+- Tri thức craft (hook/cấu trúc kể, prompt Veo, giữ nhân vật, caption/âm thanh) nằm ở `references/`
+  mỗi skill — **đã lọc qua research đối kháng**, số liệu bị bác KHÔNG dùng. Nhạc nền: `assets/bgm/<mood>/`.
 - Script chạy bằng `~/.venv/claude/bin/python` (websockets, opencv, numpy, elevenlabs).
 - Engine gen **bundle sẵn trong repo**: `omniflash/` + `extension/` + `cli/` (nguồn từ
   kodelyx/flow-agent) — không phụ thuộc repo ngoài. Override khi cần engine khác:
@@ -29,3 +31,4 @@ Chỉnh video có sẵn (cắt, transcribe, color) → skill `video-use` (ngoài
 | 2026-07-03 | Move bộ skill từ `.agents/skills/` ra `skills/` (root), cập nhật mọi đường dẫn tham chiếu | AGENTS.md, README.md, skills/*/SKILL.md | Chuẩn hóa layout: skill nằm ở root repo |
 | 2026-07-03 | Move skill về lại `.agents/skills/` + symlink `.claude/skills`; sửa độ sâu tìm root (flowgen.py parents[4], doctor.sh 4 cấp) | .agents/skills, .claude/skills, flowgen.py, doctor.sh | Claude Code đọc skill qua .claude/skills; layout skills/ root bỏ |
 | 2026-07-03 | Vendor engine flow-agent vào repo: omniflash/ + extension/ + cli/ + requirements.txt + docs/flow-agent/; vidgen.config.json thành override tùy chọn; bỏ omni.py, test_api.py, media-id.js (không gì trong repo dùng) | omniflash, extension, cli, docs, README, doctor.sh, vidgen-setup | Hết phụ thuộc repo ngoài — clone 1 repo là chạy được |
+| 2026-07-03 | **Mức 3 craft upgrade** (grounded deep-research 2 vòng): thêm 4 file `references/` (hook-and-structure, veo-prompt-craft, consistency-and-ai-tells, caption-and-audio); schema thêm field craft (hook/role/shot_size/camera_move/music, backward-compat); `tts_to_ass` → phụ đề KARAOKE word-level (`\kf`); `assemble` auto-pick nhạc theo `music.mood` + ducking chuẩn (ratio 4:1) + gỡ akasto font path; `flowgen` thêm `--mode v2v` (sửa clip khỏi gen lại); `assets/bgm/`; checklist QC craft nhồi vào 3 gate; repoint ref chết `docs/quy-trinh-tao-video-flow.md` → references | toàn bộ .agents/skills/*, assets/bgm, AGENTS, README | Nâng chất lượng & độ cuốn hút. CHÁNH KIẾN: research bác sạch số liệu phụ đề→retention và benchmark %; khía cạnh điện ảnh không có claim verify → chỉ dùng làm quy ước, không bịa số. Prompt Veo là vùng bằng chứng mạnh nhất (nguồn chính thức Google) |

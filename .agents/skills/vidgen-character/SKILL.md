@@ -5,9 +5,10 @@ description: STAGE 2 của pipeline vidgen — tạo NHÂN VẬT NHẤT QUÁN ch
 
 # Vidgen Character (char sheet → anchor → character lock)
 
-Nguyên lý (từ `docs/quy-trinh-tao-video-flow.md`): **char sheet cho NGƯỜI duyệt danh tính,
-anchor cho MÁY bám theo**. Nạp nhầm char sheet vào Flow → AI tưởng đám đông, trộn mặt.
-Ảnh T2I miễn phí — gen tới khi ưng, đừng tiếc. Video mới tốn credit.
+Nguyên lý (chi tiết + bằng chứng: `references/consistency-and-ai-tells.md`): **char sheet cho
+NGƯỜI duyệt danh tính, anchor cho MÁY bám theo**. Nạp nhầm char sheet vào Flow → AI tưởng đám
+đông, trộn mặt. Giữ nhất quán bằng **ẢNH-anchor (đã verify nguồn chính thức Google), KHÔNG bằng
+mô tả chữ hay seed** (lối "tả chi tiết = nhất quán" đã bị bác). Ảnh T2I miễn phí — gen tới khi ưng.
 
 ```bash
 PY=~/.venv/claude/bin/python
@@ -50,7 +51,11 @@ mặt biến dạng)?
 
 ## Bước 4 · GATE 2 (character lock)
 
-Trình user: char sheet + anchors + clip thử. User gật → set `gates.character_lock = true`.
+Trình user: char sheet + anchors + clip thử. **Tự-QC craft trước khi trình** (xem
+`references/consistency-and-ai-tells.md`):
+☐ anchor 1-người/1-góc/nền trơn/rõ mặt ☐ clip thử giữ mặt khớp anchor qua các frame
+☐ không AI-tell (thừa ngón, méo mặt, morphing) ☐ style đồng bộ giữa mọi anchor.
+User gật → set `gates.character_lock = true`.
 Từ đây **danh tính nhân vật KHÓA** — không đổi desc/anchor giữa chừng; đổi = gen lại từ đầu.
 
 ## Chạy lại / sửa

@@ -12,6 +12,16 @@ Manifest là NGUỒN SỰ THẬT duy nhất về trạng thái dự án. Script 
   "voice_id": "",                       // ElevenLabs voice id (rỗng = video không lời đọc)
   "flow_project_id": "",                // rỗng = dùng DEFAULT_PROJECT của omniflash
 
+  "hook": {                             // MỞ ĐẦU — nơi tụt người xem mạnh nhất (short-form ~3s, long-form ~30s)
+    "promise": "",                      // lời hứa/tò mò khán giả nhận NGAY giây đầu (open loop)
+    "first_frame": "",                  // mô tả frame hình đầu tiên gây tò mò → đưa vào prompt cảnh mở
+    "spoken": ""                        // câu VO đầu tiên, mạnh nhất — đặt lên đầu
+  },
+  "music": {                            // nhạc nền — auto-pick theo mood hoặc chỉ định file
+    "mood": "",                         // calm|tense|uplifting|sad|epic|playful|neutral (rỗng = không nhạc)
+    "file": ""                          // nhạc cụ thể (ưu tiên hơn mood; CLI --bgm override cả hai)
+  },
+
   "gates": {                            // 3 cổng human — orchestrator kiểm trước khi đi tiếp
     "script_lock": false,               // GATE 1: kịch bản + storyboard đã duyệt
     "character_lock": false,            // GATE 2: anchor + clip thử đã duyệt
@@ -39,6 +49,9 @@ Manifest là NGUỒN SỰ THẬT duy nhất về trạng thái dự án. Script 
       "duration": 8,                    // 4|6|8|10 — thời lượng gen; khi ráp sẽ setpts khớp lời đọc
       "characters": ["be_na"],          // id nhân vật xuất hiện → flowgen tự chọn anchor làm ref
       "angle": "front",                 // góc nhân vật trong cảnh → chọn anchor đúng góc
+      "role": "hook",                   // (tùy chọn) vai trò mạch kể: hook|setup|development|turn|payoff|cta
+      "shot_size": "medium",            // (tùy chọn) cỡ cảnh: wide|medium|close|extreme_close|establishing — ĐA DẠNG giữa các cảnh
+      "camera_move": "push_in",         // (tùy chọn) chuyển máy: static|push_in|pull_out|pan|tilt|orbit|handheld|crane
       "image": { "file": "03_images/scene01.png", "media_id": "", "approved": false },
       "end_image": { "media_id": "" },  // chỉ mode "fl"
       "clip": { "file": "04_clips/scene01.mp4", "media_id": "", "status": "pending" },
@@ -50,7 +63,6 @@ Manifest là NGUỒN SỰ THẬT duy nhất về trạng thái dự án. Script 
     }
   ],
 
-  "audio": { "bgm": "" },               // đường dẫn nhạc nền (tùy chọn)
   "final": "06_final/final.mp4"
 }
 ```
@@ -78,3 +90,24 @@ projects/<tên>/
 - 1 cảnh = 1 ý = 1 chuyển động chính, 4-10s. Cảnh không nhân vật → `mode: "t2v"`, bỏ `characters`.
 - `vo` mỗi cảnh nên đọc hết trong ~`duration` giây (tiếng Việt ~3-4 chữ/giây;
   cảnh 8s ≈ 24-30 chữ). Lệch nhiều thì khi ráp clip bị kéo/nén quá tay.
+
+## Field craft (Mức 3 — TÙY CHỌN, backward-compatible)
+
+Các field dưới đây **không bắt buộc** — dự án cũ thiếu chúng vẫn chạy y nguyên. Khi có, script
+dùng để nâng chất lượng. Nền tảng bằng chứng nằm ở các file `references/` của từng skill (đọc
+trước khi điền — đã lọc số liệu bịa, chỉ giữ kỹ thuật có nguồn):
+
+- **`hook`** (project-level) — mở đầu là nơi tụt người xem mạnh nhất: short-form quyết trong
+  **~3 giây** ("swipe or stay"), long-form tụt mạnh nhất **15-30 giây** đầu (YouTube Help: intro
+  đo bằng % còn xem sau 30s). Điền `promise`/`first_frame`/`spoken` để dồn lực vào đây; cảnh mở
+  đặt `role: "hook"`. Chi tiết: `vidgen-script/references/hook-and-structure.md`.
+- **`role`** (scene) — vai trò cảnh trong mạch kể (3 hồi, hoặc kishōtenketsu 4 phần
+  ki→shō→ten→ketsu cho video KHÔNG dựa xung đột). Cho biết cảnh nào là hook (đầu tư nhất) / payoff.
+- **`shot_size`** (scene) — cỡ cảnh; **đa dạng giữa các cảnh liền kề** cho nhịp thị giác. Đưa
+  thẳng vào `prompt` (Veo hiểu "wide establishing shot", "medium shot", "close-up"). Đừng để mọi
+  cảnh cùng một cỡ.
+- **`camera_move`** (scene) — chuyển động máy có chủ đích, đưa vào `prompt` (Veo hiểu "slow
+  push-in", "180-degree orbit", "handheld", "static"). Vựng từ đầy đủ:
+  `vidgen-clips/references/veo-prompt-craft.md`.
+- **`music.mood`** (project-level) — assemble tự chọn nhạc nền khớp mood từ `assets/bgm/`, hoặc
+  `music.file` chỉ định tay. Chi tiết: `vidgen-assemble/references/caption-and-audio.md`.

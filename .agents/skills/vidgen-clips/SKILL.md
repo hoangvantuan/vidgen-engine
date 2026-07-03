@@ -9,6 +9,10 @@ Kinh tế của stage này: **ảnh miễn phí, video tốn credit**. Vì vậy
 gen ảnh khung đầu → user duyệt ảnh (rẻ) → mới I2V (đắt, 1 lần/cảnh). Mọi tiến độ ghi vào
 `project.json` sau TỪNG cảnh — đứt giữa chừng chạy lại không mất gì, không gen trùng.
 
+**Craft prompt (đọc trước khi gen/soi):** công thức prompt Veo 5 phần, vựng camera/cỡ cảnh, negative
+prompt tránh AI-tell, cách né chặn nội dung → `references/veo-prompt-craft.md`. Veo 3 còn **sinh
+audio (SFX/ambience) ngay từ prompt** — hữu ích cho cảnh không lời đọc.
+
 ```bash
 PY=~/.venv/claude/bin/python
 GEN=.agents/skills/vidgen-clips/scripts/flowgen.py
@@ -45,12 +49,16 @@ Xong batch báo user danh sách failed để quyết: gen lại / sửa prompt /
 ## Bước 3 · QC nhanh trước khi sang ráp
 
 Xem từng clip trong `04_clips/`: ☐ nhân vật khớp anchor ☐ chuyển động không giật/AI-tell
-☐ không chữ lạ trong hình ☐ đúng aspect. Clip hỏng → sửa prompt cảnh đó → `--scene N --regen`.
+☐ không chữ lạ trong hình ☐ đúng aspect ☐ cỡ cảnh đa dạng giữa các cảnh. Clip hỏng → sửa prompt
+cảnh đó → `--scene N --regen`; hoặc CHỈ lỗi nhỏ → sửa bằng **v2v** (mục "Lệnh lẻ") khỏi gen lại cả clip.
 
 ## Lệnh lẻ (ngoài pipeline)
 
-`flowgen.py` cũng dùng độc lập được: `t2i` (ảnh nhanh), `upload-image`, `clip --mode t2v|i2v|r2v|fl`
+`flowgen.py` cũng dùng độc lập được: `t2i` (ảnh nhanh), `upload-image`, `clip --mode t2v|i2v|r2v|fl|v2v`
 (1 clip lẻ). Xem `$PY $GEN --help`.
+**Sửa clip đã có (v2v) — khỏi gen lại từ đầu, tiết kiệm credit:**
+`clip --mode v2v --video-id <media_id> --prompt "đổi X thành Y"` (media_id lấy từ
+`scenes[].clip.media_id` trong manifest), hoặc `--video-file clip.mp4` (upload video local rồi sửa).
 
 ## Sự cố hay gặp
 

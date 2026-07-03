@@ -40,10 +40,30 @@ def run(cmd):
         raise SystemExit("ffmpeg lỗi: " + " ".join(map(str, cmd))[:200])
 
 
+def resolve_bgm(cli_bgm, music, pdir, bgm_dir):
+    """Chọn nhạc nền. Ưu tiên: CLI --bgm > music.file (manifest) > auto-pick theo music.mood.
+    Auto-pick tìm trong bgm_dir file khớp mood: <mood>/*.mp3|wav hoặc <mood>*.mp3|wav (lấy file đầu)."""
+    if cli_bgm:
+        return cli_bgm
+    f = (music.get("file") or "").strip()
+    if f:
+        p = Path(f)
+        return str(p if p.is_absolute() else pdir / f)
+    mood = (music.get("mood") or "").strip().lower()
+    if mood and Path(bgm_dir).is_dir():
+        d = Path(bgm_dir)
+        cands = (sorted(d.glob(f"{mood}/*.mp3")) + sorted(d.glob(f"{mood}*.mp3"))
+                 + sorted(d.glob(f"{mood}/*.wav")) + sorted(d.glob(f"{mood}*.wav")))
+        if cands:
+            return str(cands[0])
+    return ""
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--project", required=True, help="thư mục dự án chứa project.json")
-    ap.add_argument("--bgm", default="", help="file nhạc nền (tùy chọn)")
+    ap.add_argument("--bgm", default="", help="file nhạc nền — override cả music.mood/file trong manifest")
+    ap.add_argument("--bgm-dir", default="", help="thư viện nhạc theo mood (mặc định: assets/bgm/ ở root engine)")
     ap.add_argument("--bgm-vol", type=float, default=0.9)
     ap.add_argument("--endcard", default="", help="ảnh end-card cuối (tùy chọn)")
     ap.add_argument("--endcard-dur", type=float, default=2.5)
@@ -51,7 +71,7 @@ def main():
     ap.add_argument("--xfade", default="", help='transition mặc định cho MỌI cắt cảnh "type:dur" '
                     '(vd "fade:0.5"); từng cảnh override bằng scenes[].transition trong manifest')
     ap.add_argument("--no-burn", action="store_true", help="không burn sub (xuất kit cho CapCut)")
-    ap.add_argument("--fonts-dir", default="", help="thư mục font cho sub (mặc định: tự tìm Be Vietnam Pro trong akasto-thumbnail)")
+    ap.add_argument("--fonts-dir", default="", help="thư mục font cho sub (mặc định: assets/fonts bundle trong skill)")
     ap.add_argument("--out", default="", help="mặc định: 06_final/final.mp4")
     a = ap.parse_args()
 
@@ -60,6 +80,16 @@ def main():
     w, h = RES.get(m.get("aspect", "portrait"), RES["portrait"])
     out = Path(a.out) if a.out else pdir / "06_final" / "final.mp4"
     out.parent.mkdir(parents=True, exist_ok=True)
+
+    # ── nhạc nền: CLI --bgm > music.file > auto-pick theo music.mood trong assets/bgm/ ──
+    music = m.get("music") if isinstance(m.get("music"), dict) else {}
+    engine_root = Path(__file__).resolve().parents[4]
+    bgm_dir = a.bgm_dir or str(engine_root / "assets" / "bgm")
+    bgm = resolve_bgm(a.bgm, music or {}, pdir, bgm_dir)
+    if bgm and not a.bgm:
+        print(f"♪ nhạc nền tự chọn (mood={(music or {}).get('mood') or 'file'}): {bgm}")
+    elif (music or {}).get("mood") and not bgm:
+        print(f"⚠ music.mood='{music['mood']}' nhưng không thấy nhạc khớp trong {bgm_dir} — video sẽ không nhạc.")
 
     narration = pdir / "05_audio" / "narration.mp3"
     ass = pdir / "05_audio" / "subs.ass"
@@ -189,10 +219,8 @@ def main():
              "-c", "copy", str(body)])
 
     skill_dir = Path(__file__).resolve().parents[1]
-    fonts = a.fonts_dir or next((str(d) for d in [
-        skill_dir / "assets" / "fonts",                         # font bundle trong skill
-        skill_dir.parent / "akasto-thumbnail" / "references"]   # layout cũ trong flow-agent
-        if d.exists()), "")
+    _fdir = skill_dir / "assets" / "fonts"                       # font bundle trong skill (Be Vietnam Pro)
+    fonts = a.fonts_dir or (str(_fdir) if _fdir.exists() else "")
     can_burn = ass.exists() and not a.no_burn and has_subtitles_filter()
     if ass.exists() and not a.no_burn and not can_burn:
         print("⚠ ffmpeg này thiếu libass (bản brew rút gọn) — không burn được sub. "
@@ -207,17 +235,18 @@ def main():
     fc, amap = [], None
     if has_voice:
         cmd += ["-i", str(narration)]
-        if a.bgm:
-            cmd += ["-stream_loop", "-1", "-i", a.bgm]
+        if bgm:
+            cmd += ["-stream_loop", "-1", "-i", bgm]
+            # ducking chuẩn mixing (ratio 4:1, attack 15ms, release 300ms) — nhạc lùi dưới giọng
             fc.append(f"[2:a]volume={a.bgm_vol}[b];[b][1:a]sidechaincompress="
-                      f"threshold=0.03:ratio=8:attack=5:release=400[duck];"
+                      f"threshold=0.03:ratio=4:attack=15:release=300[duck];"
                       f"[1:a][duck]amix=inputs=2:duration=first:dropout_transition=0,"
                       f"apad=pad_dur={a.tail}[aout]")
             amap = "[aout]"
         else:
             amap = "1:a"
-    elif a.bgm:
-        cmd += ["-stream_loop", "-1", "-i", a.bgm]
+    elif bgm:
+        cmd += ["-stream_loop", "-1", "-i", bgm]
         fc.append(f"[1:a]volume={a.bgm_vol},afade=t=out:st={max(0, total-2):.2f}:d=2[aout]")
         amap = "[aout]"
     if vf:
