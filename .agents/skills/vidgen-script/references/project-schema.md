@@ -9,7 +9,8 @@ Manifest là NGUỒN SỰ THẬT duy nhất về trạng thái dự án. Script 
   "preset": "story",                    // "story" (kể chuyện dài) | "reel" (ngắn 20-60s)
   "aspect": "portrait",                 // "portrait" 9:16 | "landscape" 16:9
   "language": "vi",
-  "voice_id": "",                       // ElevenLabs voice id (rỗng = video không lời đọc)
+  "voice_id": "",                       // ElevenLabs voice id của NARRATOR (giọng kể). Rỗng = video không lời đọc.
+                                        // Thoại nhân vật dùng characters[].voice_id riêng (xem dưới).
   "flow_project_id": "",                // rỗng = dùng DEFAULT_PROJECT của omniflash
 
   "hook": {                             // MỞ ĐẦU — nơi tụt người xem mạnh nhất (short-form ~3s, long-form ~30s)
@@ -42,6 +43,9 @@ Manifest là NGUỒN SỰ THẬT duy nhất về trạng thái dự án. Script 
     {
       "id": "be_na",
       "desc": "bé gái 5 tuổi, tóc hai bím, váy vàng, mắt to",   // NHẮC LẠI trong prompt mỗi cảnh
+      "voice_id": "",                                          // (tùy chọn) ElevenLabs voice id RIÊNG cho thoại
+                                                               //   nhân vật này (scenes[].dialogue[]). Rỗng → dùng
+                                                               //   giọng narrator. Xem "Đa giọng" cuối file.
       "sheet": "02_characters/be_na_sheet.png",                 // char sheet — cho NGƯỜI duyệt, KHÔNG nạp vào Flow
       "anchors": [                                              // anchor — cho MÁY: 1 người/ảnh, 1 góc, nền trơn
         { "angle": "front", "file": "02_characters/be_na_front.png", "media_id": "" },
@@ -91,9 +95,9 @@ Manifest là NGUỒN SỰ THẬT duy nhất về trạng thái dự án. Script 
       "atmosphere": "",                 // (tùy chọn) khí quyển: rain|fog|smoke|god_rays|dust|snow|haze (trống → auto)
       "lens": "",                       // (tùy chọn) ống kính: wide_24|35mm|50mm|85mm|macro
       "sfx": ["gentle cafe ambience", "coffee cup clink"],   // (tùy chọn) hiệu ứng âm thanh — Veo 3 sinh audio đồng bộ
-      "dialogue": [                     // (tùy chọn) thoại NHÂN VẬT trong hình (Veo 3 lồng tiếng) — KHÁC `vo` (narration)
-        { "char": "be_na", "line": "Con tìm thấy rồi!" }
-      ],
+      "dialogue": [                     // (tùy chọn) thoại NHÂN VẬT — KHÁC `vo` (narration). CÓ CONSUMER (xem "Đa giọng").
+        { "char": "be_na", "line": "Con tìm thấy rồi!" }   // char trỏ characters[].id → dùng voice_id của nhân vật đó
+      ],                                //   MÔ HÌNH P1: cảnh có dialogue[] thì KHÔNG dùng `vo` — mỗi cảnh 1 kiểu tiếng.
 
       // ── Continuity giữa cảnh (tùy chọn) — nối liền mạch, chống nhảy setting/đảo hướng ──
       "screen_direction": "L2R",        // hướng chuyển động trên khung: L2R|R2L|toward|away|static (giữ nhất quán mạch)
@@ -203,9 +207,9 @@ field có cấu trúc để (a) QC tự động, (b) auto-fill từ tri thức �
 - **`sfx[]`** — hiệu ứng âm thanh named-text (vd "footsteps on gravel"). **CONSUMER** (Stage 4): assemble
   bỏ audio gốc Veo (hay lồng giọng-bịa tiếng Anh đè lời đọc), nên `sfx[]` được tiêu thụ qua đường riêng —
   `gen_sfx.py` gen file SFX sạch từ `sfx[]` → `assemble.py --sfx auto` mix làm lớp thứ 3 dưới giọng. KHÔNG mồ côi.
-- **`dialogue[]`** — thoại NHÂN VẬT hiện trong hình (Veo lồng tiếng), tách khỏi `vo` (narration ElevenLabs).
-  ⚠️ **Hiện là METADATA-ONLY** — chưa có consumer ở Stage 4 (audio Veo bị bỏ). Điền để lưu ý đạo diễn, đừng
-  kỳ vọng nghe được thoại này ở bản ráp; cần thoại thì đưa vào `vo` hoặc gen riêng.
+- **`dialogue[]`** — thoại NHÂN VẬT, tách khỏi `vo` (narration). **CÓ CONSUMER** (Stage 4, đường đa giọng): mỗi
+  lượt `{char, line}` được `tts_to_ass.py` gen bằng **giọng riêng của nhân vật** (`characters[char].voice_id`),
+  nối đúng timing → nghe được ở bản ráp. Vẫn vào `[Subject]` của prompt (Veo diễn khẩu hình). Xem "Đa giọng" cuối file.
 
 **Nhóm continuity (scene) — chống 2 lỗi kinh điển của video AI ghép cảnh:**
 - **`screen_direction`** — hướng chuyển động trên khung (L2R/R2L/toward/away/static). AI hay tự đảo
@@ -217,3 +221,30 @@ field có cấu trúc để (a) QC tự động, (b) auto-fill từ tri thức �
   (chọn theo Laplacian variance, chống motion-blur) của clip cảnh trước → upload → làm khung đầu cảnh
   này. Gen TUẦN TỰ theo thứ tự manifest; cần clip cảnh trước tồn tại (cùng run hoặc run trước). Cảnh
   `link_prev` không cần ảnh riêng đã duyệt. Cặp đổi bối cảnh hoàn toàn thì ĐỪNG bật (frame-chain vô nghĩa).
+
+## Đa giọng — "vừa kể vừa đối thoại" (lồng tiếng, ĐÃ thực thi)
+
+Pipeline dựng được video vừa có **người kể** (narration) vừa có **nhân vật nói chuyện thật** — mỗi
+người một giọng ElevenLabs. Kiểu **lồng tiếng (dub)**: giọng đúng nhân vật + nội dung tiếng Việt kiểm
+soát được, **KHÔNG khớp miệng** (ta bỏ audio gốc Veo nên clip không có cử động miệng khớp từng từ).
+
+**Cách khai báo:**
+1. `voice_id` (project-level) = giọng **narrator** (đọc `vo`).
+2. `characters[].voice_id` = giọng **riêng từng nhân vật** (đọc `dialogue[]`). Thiếu → fallback narrator.
+3. **Mô hình P1 — mỗi cảnh 1 kiểu tiếng:** cảnh HOẶC có `vo` (kể) HOẶC có `dialogue[]` (thoại). Muốn
+   đan xen kể–thoại thì **tách cảnh** (cảnh kể riêng, cảnh thoại riêng) — vừa hợp nhịp cắt, vừa cho
+   phép **cắt sang người nghe/góc lưng** khi ai đó nói (giấu chỗ lệch miệng). Một cảnh `dialogue[]`
+   chứa **1-3 lượt** được (khi khung đủ rộng, miệng nhỏ khó soi); mặc định nên 1 lượt/cảnh.
+
+**Cơ chế consumer** (`tts_to_ass.py`, tự kích hoạt khi manifest có `dialogue[]`):
+- Gen TTS **từng cảnh đúng giọng** → nối lại (chèn khoảng lặng `--gap` mặc định 0.25s giữa các lượt/cảnh
+  cho nhịp thở) → `narration.mp3`. Mốc `timings.json` đo từ **độ dài audio thật** (ffprobe) nên khớp
+  chính xác. `subs.ass` gom dòng **riêng theo từng lượt** (không lẫn giọng). **Sub KHÔNG gắn tên người
+  nói** — giọng khác nhau đã đủ phân biệt.
+- **Hybrid, backward-compat:** manifest **không có** `dialogue[]` → chạy y nguyên đường 1-lệnh cũ
+  (narrator thuần, prosody mượt, rẻ hơn). Chỉ khi có `dialogue[]` mới rẽ per-scene.
+- **Hợp đồng với `assemble.py` KHÔNG đổi:** vẫn tiêu thụ đúng 3 file `narration.mp3` + `timings.json` +
+  `subs.ass`. Không phải sửa assemble.
+- **Âm dương:** hội thoại qua-lại nhanh = nhiều cảnh = nhiều clip = tốn credit hơn. Cân nhắc mật độ thoại.
+- Cách VIẾT thoại lồng tiếng cho tự nhiên (thoại khi không cận mặt chính diện...): xem
+  `vidgen-script/references/vo-writing-craft.md` mục "Viết thoại kiểu lồng tiếng".

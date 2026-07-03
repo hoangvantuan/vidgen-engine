@@ -42,17 +42,34 @@ tụt mạnh nhất **15-30s** đầu (YouTube đo intro = % còn xem sau 30s). 
 (`promise`/`first_frame`/`spoken`) trong manifest; đặt câu VO mạnh nhất + frame tò mò LÊN ĐẦU. Mẫu
 hook + cấu trúc kể (3 hồi / kishōtenketsu): đọc `references/hook-and-structure.md`.
 
-## Bước 2 · Kịch bản cho người đọc
+## Bước 2 · Kịch bản cho người đọc — viết LỜI cho tai
 
 Viết `01_script/kichban.md`: lời đọc (VO) tiếng Việt từng cảnh + mô tả hình ngắn.
 Câu ngắn, chủ động, đọc to lên nghe tự nhiên. **Cấm em-dash `—`** trong VO (tell AI tiếng Việt).
+
+**Craft tầng ngôn từ (bắt buộc đọc `references/vo-writing-craft.md`):** cấu trúc đúng chưa đủ — lời
+viết PHẲNG thì hình đẹp mấy cũng không giữ được người xem. File đó dạy 7 việc kèm before/after: ①
+hook execution (câu đầu không dạo đầu) ② open-loop laddering (cấy lực kéo, chống kể tuyến tính rời)
+③ biến thiên nhịp (câu cụt để đấm, chống ngắn đều buồn tẻ) ④ show-don't-tell (chi tiết gánh, cắt
+tính từ cảm xúc) ⑤ dấu lặng (cảnh không lời cho hình thở) ⑥ khoá 1 through-line ⑦ viết thoại lồng
+tiếng. **Test xuyên suốt: ĐỌC TO** — vấp/nghe như văn viết thì sửa (TTS đọc y như bạn viết).
+
+**Video có nhân vật NÓI CHUYỆN thật (vừa kể vừa thoại):** pipeline hỗ trợ **lồng tiếng đa giọng** —
+narrator đọc `vo`, mỗi nhân vật một giọng riêng đọc `dialogue[]`. Kiểu dub (KHÔNG khớp miệng). Cách
+khai báo + luật viết: mục "Đa giọng" trong `references/project-schema.md` và mục ⑦ ở `vo-writing-craft.md`.
 
 ## Bước 3 · Storyboard máy-đọc-được (điền FIELD → compiler ghép prompt)
 
 Tạo `projects/<tên>/project.json` theo schema — **đọc `references/project-schema.md`
 trước khi viết file này** (quy tắc field, độ dài VO khớp duration, cách tách cảnh, cơ chế compiler).
-Điền: `characters` (desc chi tiết), `locations` (nếu khoá bối cảnh), `style` chung, scenes.
-Mặc định `mode: "i2v"` (ảnh duyệt trước, rẻ) — cảnh thuần bối cảnh không nhân vật thì `t2v`.
+Điền: `characters` (desc chi tiết; **`voice_id` nếu nhân vật có thoại** — xem dưới), `locations`
+(nếu khoá bối cảnh), `style` chung, scenes. Mặc định `mode: "i2v"` (ảnh duyệt trước, rẻ) — cảnh
+thuần bối cảnh không nhân vật thì `t2v`.
+
+**Cảnh có thoại nhân vật (đa giọng):** điền `dialogue[]` (`{char, line}`) + gán `characters[].voice_id`
+cho nhân vật đó. **Mô hình P1: cảnh có `dialogue[]` thì để trống `vo`** (mỗi cảnh 1 kiểu tiếng); đan
+xen kể–thoại thì tách cảnh. Consumer tự kích hoạt đường đa giọng khi thấy `dialogue[]`. Chi tiết:
+mục "Đa giọng" ở `references/project-schema.md`.
 
 **Cách viết mới — điền FIELD, KHÔNG viết prompt tay** (Mức 4): `prompt` là field DẪN XUẤT do
 compiler ghép. Mỗi cảnh điền:
@@ -82,6 +99,11 @@ Tự kiểm trước khi trình user (gate 1 — đã nhồi craft). **Chạy `c
 ☐ đặc điểm nhân vật nhắc lại trong prompt ☐ **đa dạng cỡ cảnh** (shot_size không đơn điệu)
 ☐ **continuity**: screen_direction nhất quán mạch, cảnh cùng bối cảnh trỏ đúng `location`
 ☐ không yêu cầu chữ trong hình ☐ không em-dash ☐ tổng thời lượng khớp brief ☐ **1 CTA** duy nhất.
+**Craft LỜI (đọc-to, theo `vo-writing-craft.md`):** ☐ câu VO đầu không dạo đầu (niên đại/tên/chào)
+☐ có ≥1 open loop cấy sớm–đóng ở payoff ☐ đọc to 3 cảnh liền không đều nhịp (có câu cụt để đấm)
+☐ không tính từ cảm xúc tổng kết thay được bằng chi tiết ☐ có ≥1 cảnh lặng chủ động sau beat nặng
+☐ through-line 1 câu, turn+payoff cùng trục ☐ (nếu có thoại) cảnh thoại lệch khỏi close-up chính diện,
+mỗi nhân vật có `voice_id`, `vo` trống ở cảnh `dialogue[]`.
 Trình user duyệt kịch bản + storyboard. User gật → set `gates.script_lock = true`. **Chưa gật thì KHÔNG gen gì cả.**
 
 ## Chạy lại / sửa

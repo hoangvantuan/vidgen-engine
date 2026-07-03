@@ -27,6 +27,14 @@ curl -s -H "xi-api-key: $ELEVENLABS_API_KEY" https://api.elevenlabs.io/v2/voices
   | $PY -c "import sys,json; [print(v['voice_id'], v['name']) for v in json.load(sys.stdin).get('voices',[])]"
 $PY $SK/tts_to_ass.py --project projects/<tên> --voice <VOICE_ID>
 ```
+**RANH GIỚI môi trường→script:** nếu key báo "thiếu" dù `zsh` thấy, đó là **shell var chưa export**
+(tiến trình con không nhận). Chạy qua: `zsh -lic 'export ELEVENLABS_API_KEY; $PY $SK/tts_to_ass.py ...'`.
+
+**Đa giọng (vừa kể vừa thoại):** manifest có `scenes[].dialogue[]` → script TỰ chuyển đường per-scene
+(mỗi nhân vật đọc bằng `characters[].voice_id` riêng, `--voice` là giọng narrator). `--gap` chỉnh
+khoảng lặng giữa lượt (mặc định 0.25s). Không có `dialogue[]` → chạy y như cũ. Chi tiết: mục "Đa giọng"
+ở `../vidgen-script/references/project-schema.md`.
+
 Đọc VO mọi cảnh từ manifest → xuất `05_audio/narration.mp3` + `subs.ass` + `timings.json`.
 **Phụ đề mặc định KARAOKE word-level** (tô sáng chạy theo từng chữ, dùng timestamp ElevenLabs sẵn
 có), font Be Vietnam Pro, safe-zone 9:16. Tùy chọn: `--plain` (sub tĩnh), `--highlight cyan|yellow`,
