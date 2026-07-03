@@ -7,3 +7,4 @@ media-id.js
 output/
 # dự án video (media nặng) — bỏ dòng này nếu muốn version cả dự án
 projects/
+.venv
