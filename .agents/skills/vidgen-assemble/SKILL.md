@@ -16,8 +16,10 @@ SK=.agents/skills/vidgen-assemble/scripts
 
 ## Bước 1 · Giọng đọc + phụ đề + timings
 
-Cần `ELEVENLABS_API_KEY` (thiếu → skill setup-api-key). Chọn voice cùng user trước.
+Cần `ELEVENLABS_API_KEY` (thiếu → skill setup-api-key). Chọn voice cùng user trước — liệt kê voice:
 ```bash
+curl -s -H "xi-api-key: $ELEVENLABS_API_KEY" https://api.elevenlabs.io/v2/voices \
+  | $PY -c "import sys,json; [print(v['voice_id'], v['name']) for v in json.load(sys.stdin).get('voices',[])]"
 $PY $SK/tts_to_ass.py --project projects/<tên> --voice <VOICE_ID>
 ```
 Đọc VO mọi cảnh từ manifest → xuất `05_audio/narration.mp3` + `subs.ass` + `timings.json`.
@@ -35,7 +37,8 @@ $PY $SK/assemble.py --project projects/<tên> --endcard cta.png   # nhạc tự 
 ```
 **Nhạc nền** (ưu tiên): `--bgm file` > `music.file` manifest > auto-pick theo `music.mood` từ
 `assets/bgm/` (đổi thư mục bằng `--bgm-dir`; thả nhạc theo README ở đó). Ducking đã chỉnh chuẩn
-mixing (ratio 4:1, attack 15ms) — nhạc lùi dưới giọng.
+mixing (ratio 4:1, attack 15ms) — nhạc lùi dưới giọng. Chưa có nhạc? **Tự gen bằng skill `music`**
+(ElevenLabs Music, composition plan theo cung cảm xúc — rất hợp video kể chuyện) → xuất .mp3 vào `assets/bgm/<mood>/`.
 Làm gì: mỗi clip cover-crop đúng khung (Flow trả 720×1280, tự scale lên) + bỏ audio gốc Veo
 + retime khớp `timings.json` (clip DÀI hơn đích → cắt giữ tốc độ thật; NGẮN hơn → làm chậm
 mượt bằng setpts — không freeze, không giật) → nối → burn sub → nhạc nền ducking theo giọng
@@ -46,7 +49,8 @@ Cảnh nào clip `failed` nhưng có ảnh đã gen → tự **fallback Ken Burn
 fadewhite tỉnh giấc, fade dịu, cut nhịp nhanh) hoặc `--xfade "fade:0.5"` áp mọi cắt cảnh.
 Script tự render mỗi cảnh DƯ đúng phần xfade "ăn" nên video vẫn khớp narration.
 Tùy chọn: `--no-burn` xuất KIT (base sạch + sub rời) giao CapCut · `--tail` chỉnh giây nán ·
-`--fonts-dir` nếu máy thiếu font tiếng Việt.
+`--fonts-dir` nếu máy thiếu font tiếng Việt · `--light` xuất thêm bản share nhẹ `*_light.mp4`
+(CRF 26; thêm `--light-scale 720` để hạ 720p cho nhẹ nữa).
 
 ## Bước 3 · GATE 3 (final review)
 

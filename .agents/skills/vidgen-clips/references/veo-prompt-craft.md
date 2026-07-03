@@ -20,7 +20,9 @@ Càng chi tiết từng khối → càng kiểm soát output. Mẫu điền:
 [Style & Ambiance] <style chung của dự án LẶP NGUYÊN VĂN> + <ánh sáng> + <mood>.
 ```
 - **Lặp NGUYÊN VĂN** style chung (art style, palette, lighting) ở mọi cảnh → các cảnh đồng bộ.
-- **KHÔNG yêu cầu chữ trong hình** (sub burn sau).
+- **KHÔNG yêu cầu chữ trong hình** (sub burn sau). `flowgen scene-images` tự nối "no text…" chống
+  AI bịa chữ/thư pháp; tắt bằng `--allow-text`.
+- **Continuity địa điểm:** cảnh liền kề cùng bối cảnh → lặp NGUYÊN VĂN cụm mô tả địa điểm.
 
 ## 2 · Vựng từ điện ảnh → đưa thẳng vào prompt (điền `shot_size`, `camera_move`)
 

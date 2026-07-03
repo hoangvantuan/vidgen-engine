@@ -84,7 +84,10 @@ projects/<tên>/
 
 - `prompt` viết **tiếng Anh**, tả đủ: chủ thể + hành động + camera + ánh sáng + style chung.
   **Nhắc lại đặc điểm nhân vật** (từ `characters[].desc`) trong prompt — đừng chỉ dựa vào ảnh ref.
-- **KHÔNG yêu cầu chữ trong hình** (sub burn sau khi ráp).
+- **KHÔNG yêu cầu chữ trong hình** (sub burn sau khi ráp). `flowgen scene-images` TỰ nối
+  "no text, no watermark…" vào prompt (AI hay tự bịa chữ/thư pháp dù không yêu cầu) — tắt bằng `--allow-text`.
+- **Continuity địa điểm:** cảnh liền kề CÙNG bối cảnh → lặp **nguyên văn** cụm mô tả địa điểm
+  (đừng để cảnh sau đổi setting bất ngờ vì prompt không ràng buộc địa điểm với cảnh trước).
 - Style chung (art style, palette, lighting) lặp NGUYÊN VĂN ở mọi prompt → các cảnh đồng bộ.
 - Đổi góc nhân vật → tách cảnh mới, đặt `angle` đúng.
 - 1 cảnh = 1 ý = 1 chuyển động chính, 4-10s. Cảnh không nhân vật → `mode: "t2v"`, bỏ `characters`.

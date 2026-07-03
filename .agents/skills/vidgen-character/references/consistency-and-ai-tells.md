@@ -24,6 +24,8 @@ góc · nền trơn · rõ mặt · style đồng bộ giữa mọi anchor**.
 - Nếu cần ổn định hình học khuôn mặt → thêm **nhiều góc** (nghiêng/side, 3/4). Mỗi góc = 1 anchor
   riêng, ghi `angle` đúng (flowgen chọn anchor khớp `angle` của cảnh).
 - Gen TỪNG anchor riêng, **không cắt từ char sheet** (chất lượng thấp).
+- **Đồng bộ ngược `desc`:** anchor sinh chi tiết ngoài `desc` mà muốn giữ → cập nhật
+  `characters[].desc` cho khớp anchor (desc là nguồn sự thật đưa vào prompt mọi cảnh; lệch = cảnh sau mâu thuẫn).
 
 ## 3 · Mô tả bằng chữ vẫn hữu ích — nhưng là HỖ TRỢ, không thay ảnh
 

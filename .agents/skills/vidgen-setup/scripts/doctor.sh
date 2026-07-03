@@ -57,14 +57,16 @@ for p in 9222 8100; do lsof -nP -iTCP:$p -sTCP:LISTEN >/dev/null 2>&1 && BUSY="$
 if [ -z "$BUSY" ]; then ok "Port 9222/8100 rảnh (bridge sẵn sàng)"
 else warn "Port$BUSY đang bận" "Script flow-agent khác đang chạy. Nhớ: bridge=8100, FastAPI=8000 — đừng nhầm. Kill nếu là tiến trình treo: lsof -nP -iTCP:9222 -sTCP:LISTEN"; fi
 
-# 6. ELEVENLABS_API_KEY (chỉ cần khi video có lời đọc)
-if [ -n "$ELEVENLABS_API_KEY" ]; then
+# 6. ELEVENLABS_API_KEY — phải EXPORT (tiến trình con Python mới thấy; env chỉ liệt kê biến đã export)
+if env | grep -q '^ELEVENLABS_API_KEY='; then
   TIER=$(curl -s -m 8 -H "xi-api-key: $ELEVENLABS_API_KEY" https://api.elevenlabs.io/v1/user/subscription 2>/dev/null | grep -o '"tier":"[^"]*"' | cut -d'"' -f4)
   case "$TIER" in
     "")     warn "ELEVENLABS_API_KEY có nhưng không kiểm được tier" "Mạng/proxy? Thử: curl -H \"xi-api-key: \$ELEVENLABS_API_KEY\" https://api.elevenlabs.io/v1/user/subscription" ;;
     "free") warn "ElevenLabs tier FREE" "Free hay bị chặn TTS (401 detected_unusual_activity) — cần gói trả phí để làm giọng đọc ổn định" ;;
     *)      ok "ELEVENLABS_API_KEY hợp lệ (tier: $TIER)" ;;
   esac
+elif [ -n "$ELEVENLABS_API_KEY" ]; then
+  warn "ELEVENLABS_API_KEY có nhưng CHƯA export" "Shell thấy nhưng tiến trình con (Python) sẽ KeyError. Thêm 'export ELEVENLABS_API_KEY=...' vào ~/.zshenv rồi mở shell mới."
 else
   warn "Chưa set ELEVENLABS_API_KEY" "Chỉ cần khi video có lời đọc. Set trong ~/.zshenv (nhớ export) hoặc dùng skill setup-api-key. Mỗi Bash là shell mới — set xong phải export."
 fi

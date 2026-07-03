@@ -37,6 +37,9 @@ full body, single character, <style chung>" --aspect portrait \
 Yêu cầu anchor: **1 người/ảnh · 1 góc · nền trơn · rõ mặt · style đồng bộ giữa mọi anchor**.
 Lệnh in ra `media_id` → ghi ngay vào `characters[].anchors[]` trong manifest.
 Ảnh có sẵn (user đưa) thì upload: `$PY $GEN upload-image path.png` → lấy media_id.
+**Đồng bộ ngược `desc` theo anchor:** nếu anchor sinh chi tiết ngoài `desc` (vd ông cầm gậy tre)
+mà bạn muốn giữ → **cập nhật `characters[].desc` cho khớp anchor**. Desc là nguồn sự thật đưa vào
+prompt mọi cảnh; lệch anchor sẽ làm các cảnh sau mâu thuẫn với nhân vật.
 
 ## Bước 3 · Clip thử (đốt credit NHỎ trước khi đốt LỚN)
 

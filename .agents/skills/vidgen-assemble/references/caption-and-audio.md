@@ -28,6 +28,8 @@ Từ chuẩn mixing (thay cho tham số cũ hơi mạnh tay ratio 8/attack 5):
 - Tinh chỉnh: hồi phục gấp → tăng release 300-500ms; ducking quá gắt → hạ ratio 3:1; nhạc bị ducking
   cả lúc im → nâng threshold.
 - Nguyên tắc: **giọng nổi rõ trên hết, nhạc nghe được nhưng phụ thuộc** dưới giọng.
+- **Nguồn nhạc:** thư viện `assets/bgm/<mood>/` (assemble auto-pick theo `music.mood`), hoặc **gen
+  bằng skill `music`** (ElevenLabs Music — composition plan nhiều đoạn theo cung cảm xúc, hợp kể chuyện).
 
 ## 3 · Giọng đọc (VO)
 

@@ -59,6 +59,19 @@ def resolve_bgm(cli_bgm, music, pdir, bgm_dir):
     return ""
 
 
+def norm_transition(tr):
+    """Chấp nhận transition dạng dict {"type","dur"} HOẶC chuỗi "type:dur" (vd "fade:0.5").
+    Trả dict hoặc None — chống crash khi manifest ghi chuỗi thay vì dict."""
+    if not tr:
+        return None
+    if isinstance(tr, str):
+        parts = tr.split(":")
+        return {"type": parts[0], "dur": float(parts[1]) if len(parts) > 1 and parts[1] else 0.5}
+    if isinstance(tr, dict):
+        return tr
+    return None
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--project", required=True, help="thư mục dự án chứa project.json")
@@ -71,6 +84,9 @@ def main():
     ap.add_argument("--xfade", default="", help='transition mặc định cho MỌI cắt cảnh "type:dur" '
                     '(vd "fade:0.5"); từng cảnh override bằng scenes[].transition trong manifest')
     ap.add_argument("--no-burn", action="store_true", help="không burn sub (xuất kit cho CapCut)")
+    ap.add_argument("--light", action="store_true", help="xuất thêm bản share nhẹ *_light.mp4 (nén cao)")
+    ap.add_argument("--light-crf", dest="light_crf", type=int, default=26, help="CRF bản light (cao=nhẹ, mặc định 26)")
+    ap.add_argument("--light-scale", dest="light_scale", type=int, default=0, help="hạ chiều rộng bản light (px, 0=giữ nguyên; vd 720)")
     ap.add_argument("--fonts-dir", default="", help="thư mục font cho sub (mặc định: assets/fonts bundle trong skill)")
     ap.add_argument("--out", default="", help="mặc định: 06_final/final.mp4")
     a = ap.parse_args()
@@ -138,7 +154,7 @@ def main():
     g = (a.xfade.split(":") + ["0.5"])[:2] if a.xfade else None
     cuts = []  # phần tử i = transition giữa cảnh i và i+1: (type, dur) hoặc None (cắt cứng)
     for i in range(len(scenes) - 1):
-        tr = scenes[i].get("transition")
+        tr = norm_transition(scenes[i].get("transition"))
         if tr is None and g:
             tr = {"type": g[0], "dur": float(g[1])}
         if tr and tr.get("type") not in (None, "", "cut"):
@@ -259,6 +275,15 @@ def main():
     cmd += ["-t", f"{total:.3f}", "-c:v", "libx264", "-preset", "medium", "-crf", "18",
             "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", str(out)]
     run(cmd)
+
+    if a.light:
+        light = out.with_name(out.stem + "_light" + out.suffix)
+        vf = ["-vf", f"scale={a.light_scale}:-2"] if a.light_scale else []
+        run(["ffmpeg", "-y", "-v", "error", "-i", str(out), *vf,
+             "-c:v", "libx264", "-preset", "veryfast", "-crf", str(a.light_crf),
+             "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", str(light)])
+        print(f"🪶 bản share nhẹ: {light} (CRF {a.light_crf}"
+              + (f", rộng {a.light_scale}px" if a.light_scale else "") + ")")
 
     if ass.exists() and not can_burn:
         import shutil

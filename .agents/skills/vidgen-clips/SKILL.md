@@ -23,7 +23,9 @@ GEN=.agents/skills/vidgen-clips/scripts/flowgen.py
 - Chrome mở + extension Flow Agent kết nối (script tự mở tab Flow, tự retry 3 lần).
 - `gates.script_lock = true` (kịch bản đã duyệt); gen hàng loạt cần thêm `character_lock = true`
   (script tự chặn, `--force` chỉ dùng cho clip thử ở stage 2).
-- Port 9222/8100 rảnh (lỗi "Address already in use" → kill script cũ trước).
+- Port 9222/8100 rảnh (bận = `python -m cli.api` hoặc flowgen cũ còn treo; flowgen nay báo rõ cách kill).
+- **Đang batch thì hạn chế sửa tay `project.json`**: script re-load + chỉ ghi field nó sở hữu
+  (image/clip) nên sửa field/cảnh KHÁC vẫn an toàn — chỉ tránh sửa đúng cảnh đang gen dở.
 
 ## Bước 1 · Ảnh khung đầu (miễn phí — vòng lặp duyệt)
 

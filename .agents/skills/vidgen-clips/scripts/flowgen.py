@@ -21,6 +21,7 @@ Ví dụ:
 """
 import argparse
 import asyncio
+import errno
 import json
 import os
 import sys
@@ -75,6 +76,21 @@ def save_manifest(project_dir: Path, m: dict):
     os.replace(tmp, p)
 
 
+# Câu đuôi chống AI tự chèn chữ vào ảnh (T2I hay bịa text/thư pháp/watermark dù không yêu cầu).
+NO_TEXT = ", no text, no letters, no words, no captions, no watermark, no signage"
+
+
+def patch_scene(project_dir: Path, scene_id, key: str, value):
+    """Re-load manifest từ đĩa, CHỈ set scenes[sid][key]=value rồi ghi atomic.
+    Giữ đúng hợp đồng schema (script chỉ đụng field nó sở hữu) → sửa tay giữa chừng không bị đè im lặng."""
+    m = load_manifest(project_dir)
+    for sc in m.get("scenes", []):
+        if sc.get("id") == scene_id:
+            sc[key] = value
+            break
+    save_manifest(project_dir, m)
+
+
 def anchor_ids_for_scene(m: dict, scene: dict) -> list[str]:
     """Gom media_id anchor của các nhân vật trong cảnh (tối đa 3 ref/prompt)."""
     ids = []
@@ -95,7 +111,14 @@ def anchor_ids_for_scene(m: dict, scene: dict) -> list[str]:
 # ── bridge ────────────────────────────────────────────────────────────────
 async def open_bridge(timeout: int = 90) -> ExtensionBridge:
     bridge = ExtensionBridge()
-    await bridge.start()
+    try:
+        await bridge.start()
+    except OSError as e:
+        if e.errno == errno.EADDRINUSE or "address already in use" in str(e).lower():
+            raise SystemExit(
+                "Port bridge (8100/9222) đang BẬN — thường do 'python -m cli.api' hoặc flowgen cũ "
+                "còn treo. Tắt rồi chạy lại: lsof -nP -iTCP:8100 -sTCP:LISTEN → kill <pid>.")
+        raise
     await bridge.wait_for_extension(timeout)
     return bridge
 
@@ -209,17 +232,19 @@ async def cmd_scene_images(a):
             refs = anchor_ids_for_scene(m, s)
             out = pdir / "03_images" / f"scene{s['id']:02d}.png"
             print(f"— Cảnh {s['id']}: gen ảnh (refs={len(refs)})")
-            results = await generate_image(bridge, s["prompt"], m.get("aspect", "portrait"),
-                                           m.get("flow_project_id", DEFAULT_PROJECT),
+            prompt = s["prompt"] + ("" if a.allow_text else NO_TEXT)
+            results = await generate_image(bridge, prompt, m.get("aspect", "portrait"),
+                                           m.get("flow_project_id") or DEFAULT_PROJECT,
                                            count=a.count, ref_media_ids=refs or None)
             if not results:
                 print(f"  ✗ cảnh {s['id']} gen ảnh lỗi — bỏ qua, chạy lại sau.")
                 continue
             out.parent.mkdir(parents=True, exist_ok=True)
             await download_image(bridge, results[0]["image_url"], str(out))
-            s["image"] = {"file": str(out.relative_to(pdir)),
-                          "media_id": results[0]["media_id"], "approved": False}
-            save_manifest(pdir, m)
+            new_img = {"file": str(out.relative_to(pdir)),
+                       "media_id": results[0]["media_id"], "approved": False}
+            s["image"] = new_img
+            patch_scene(pdir, s["id"], "image", new_img)  # merge-save: không đè sửa tay giữa chừng
         print("Xong. Duyệt ảnh trong 03_images/ rồi set image.approved=true trước khi scene-clips.")
     finally:
         await bridge.close()
@@ -251,7 +276,7 @@ async def cmd_scene_clips(a):
         for s in todo:
             mode = s.get("mode", "i2v")
             out = pdir / "04_clips" / f"scene{s['id']:02d}.mp4"
-            kwargs = dict(project_id=m.get("flow_project_id", DEFAULT_PROJECT))
+            kwargs = dict(project_id=m.get("flow_project_id") or DEFAULT_PROJECT)
             if mode in ("i2v", "fl"):
                 kwargs["image_id"] = s["image"]["media_id"]
             if mode == "fl":
@@ -266,9 +291,10 @@ async def cmd_scene_clips(a):
                                                int(s.get("duration", 8)), str(out), **kwargs)
                 if mid:
                     break
-            s["clip"] = {"file": str(out.relative_to(pdir)), "media_id": mid,
-                         "status": "done" if mid else "failed"}
-            save_manifest(pdir, m)
+            new_clip = {"file": str(out.relative_to(pdir)), "media_id": mid,
+                        "status": "done" if mid else "failed"}
+            s["clip"] = new_clip
+            patch_scene(pdir, s["id"], "clip", new_clip)  # merge-save: chỉ ghi field mình sở hữu
             print(f"  {'✓' if mid else '✗ FAILED (đã ghi manifest, gen lại bằng --scene ' + str(s['id']) + ')'}")
         failed = [s["id"] for s in m["scenes"] if s.get("clip", {}).get("status") == "failed"]
         print(f"Hoàn tất. Failed: {failed or 'không'}")
@@ -315,6 +341,8 @@ def main():
     p.add_argument("--project", required=True, help="thư mục dự án chứa project.json")
     p.add_argument("--scene", type=int, nargs="*", help="chỉ các cảnh này")
     p.add_argument("--count", type=int, default=1)
+    p.add_argument("--allow-text", dest="allow_text", action="store_true",
+                   help="cho phép chữ trong ảnh (mặc định tự nối 'no text…' chống AI bịa chữ/thư pháp)")
     p.set_defaults(fn=cmd_scene_images)
 
     p = sub.add_parser("scene-clips", help="batch gen clip các cảnh đã duyệt ảnh (TỐN credit)")
