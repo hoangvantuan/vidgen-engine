@@ -41,6 +41,33 @@ Càng chi tiết từng khối → càng kiểm soát output. Mẫu điền:
 center frame" · "creamy bokeh" · "cinematic, photorealistic". Bố cục cổ điển: rule of thirds,
 headroom hợp lý, leading lines (đưa vào mô tả cảnh khi cần).
 
+## 2b · Tỉ lệ & tương quan vật thể (scale) — thuộc tính của THẾ GIỚI, không của định dạng
+
+Bằng chứng (verify): Veo điều khiển scale bằng **prompt keyword** (shot_size + camera_angle + cụm
+quan hệ tường minh) VÀ **neo theo ảnh anchor** — tỉ lệ đã có trong location/character anchor được Veo
+bảo toàn qua các cảnh. Nguồn: veo3ai.io/blog/veo-3-image-reference-workflow-2026 (anchor neo scale),
+medium.com/@yardenhazan (forced perspective = angle × shot_size).
+
+**Nguyên tắc lõi:** scale KHÔNG bắt buộc chuẩn đời thực — nó do **style/thế giới** quyết. Chọn 1
+archetype, dán keyword mồi vào `style` project-level → mọi cảnh thừa hưởng (sửa 1 chỗ, không chỉnh từng cảnh):
+
+| Archetype | Loại video hay gặp | Quy ước scale | Keyword mồi (vào `style`/prompt) |
+|---|---|---|---|
+| **true_to_life** | vlog, tài liệu, tin tức, hướng dẫn | Đúng đời thực (cây 3–15× người tùy loài, nhà đúng tỉ lệ) | `accurate real-world scale, natural proportions, believable size relationships` |
+| **heroic** | kể chuyện, quảng cáo thương hiệu | Hơi phóng đại tạo uy nghi, KHÔNG phá vật lý — nhấn bằng low-angle | `slightly heroic scale, low-angle grandeur, imposing presence` |
+| **monumental** | sử thi, thần thoại, trailer epic | Contrast kịch tính: thiên nhiên/kiến trúc khổng lồ nuốt chửng người tạo awe | `colossal scale, monumental nature dwarfing tiny humans, awe-inspiring vastness` |
+| **storybook** | cổ tích, thiếu nhi, hoạt hình | Cách điệu dễ thương, vật thân thiện phóng đại nhẹ, không đáng sợ | `stylized storybook proportions, friendly rounded scale, cozy` |
+| **hero_product** | quảng cáo sản phẩm | Sản phẩm phóng to làm tâm điểm, môi trường thu nhỏ/tối giản | `hero product scale, product enlarged as focal centerpiece` |
+
+**Đòn bẩy cơ học (dùng field SẴN CÓ, không thêm field):**
+- `shot_size`: "extreme long shot" → chủ thể tí xíu giữa khung (nhấn sự nhỏ bé); "close/macro" → vật choán khung.
+- `camera_angle`: "worm's eye / low angle" → vật vươn cao áp đảo; "high angle / bird's eye" → chủ thể nhỏ bé, dễ tổn thương.
+- **Cụm quan hệ tường minh** trong prompt: `towering over`, `dwarfing`, `miniature beside`, `only/exactly <số>` (Veo tuân số lượng tốt tới ~15 vật cùng loại, quá thì gộp/mờ).
+
+**Bake vào anchor cho scale phi-thực NHẤT QUÁN:** muốn tỉ lệ lệch-thực giữ y hệt qua mọi cảnh (vd cây
+khổng lồ cạnh người) → dựng sẵn tỉ lệ đó trong **location anchor** (Grid Method, xem vidgen-character
+Bước 2b); Veo neo giữ. Chỉ dùng prompt keyword thì scale có thể trôi giữa các cảnh.
+
 ## 3 · Âm thanh sinh cùng video (Veo 3)
 
 Bằng chứng (confidence cao, nguồn chính thức): Veo 3 **sinh audio đồng bộ ngay từ text prompt** —
@@ -67,12 +94,36 @@ model phản hồi với negative CỤ THỂ:
   suốt/ma/phát sáng xuyên thấu…). KHÔNG retry quá 2-3 lần → đổi concept ảnh cảnh đó, hoặc để
   `failed` (assemble tự fallback Ken Burns từ ảnh tĩnh). Xem thêm bảng sự cố trong SKILL.md.
 
+## 6 · Continuity giữa cảnh — chống 2 lỗi kinh điển của video AI ghép cảnh
+
+Nguồn: CinematicHubClone (ScriptShot/ScriptScene/EditingTransitions) — quy ước điện ảnh, không số liệu.
+AI video mỗi cảnh gen độc lập → hay tự đảo hướng/nhảy setting. Ràng buộc bằng field + prompt:
+
+- **Luật 180° / screen direction (`screen_direction`):** giữ hướng chuyển động nhất quán qua các cảnh
+  (nhân vật đi trái→phải thì cảnh sau vẫn trái→phải, trừ khi có cú chuyển có chủ đích). Ghi RÕ hướng
+  vật lý trong prompt ("moving left to right") — AI hay tự lật. Compiler đưa `screen_direction` vào [Cinematography].
+- **Match cut (`match_cut_with`, `subject_position`):** nối 2 cảnh qua trùng hình-thái/chuyển động
+  (xương xoay → trạm vũ trụ; vòng tròn → mặt trời). Đặt chủ thể cùng vị trí khung 2 cảnh để mắt trôi mượt.
+- **Beat-breakdown cho hành động:** ĐỪNG gen 1 combat/hành động phức tạp 10s trong 1 cảnh (Veo morph
+  giữa frame). Chia 3-4 cảnh nhỏ (tụ lực → vung → va chạm → bật lùi), mỗi cảnh 1 `action` rõ.
+- **Giới hạn góc máy:** không quay 360° quanh nhân vật trang phục phức tạp trong 1 cảnh (dễ méo/morph) —
+  chia nhỏ shot. Cảnh close-up mặt → nhấn "consistent face matching reference".
+- **Scene-as-asset:** gom hành động vào CÙNG location (khoá bối cảnh, xem vidgen-character Bước 2b);
+  đổi location thì bắc cầu qua yếu tố môi trường, đừng nhảy đột ngột.
+
+Ranh giới rõ: `screen_direction`/`match_cut_with` là **continuity NỘI DUNG** (đưa vào prompt/lên kế
+hoạch cảnh); còn `transition.type` (xfade/dissolve) là **hiệu ứng BIÊN TẬP** ở Stage 4 — hai thứ khác nhau.
+
 ## Map vào stage
 
-- **Storyboard-prompt (Stage 1 điền `prompt`)** + **gen clip (Stage 3)**. `shot_size`/`camera_move`
-  trong manifest → nhắc người/skill đưa vựng từ trên vào prompt.
+- **Storyboard (Stage 1):** điền field craft → `flowgen compile-prompts` ghép ra `scenes[].prompt`
+  (5 khối trên) tự động; viết tay thì bật `prompt_override`. `shot_size`/`camera_angle`/`camera_move`/
+  `lighting`/`atmosphere`/`sfx`/`screen_direction` là nguyên liệu compiler. Chi tiết compiler:
+  `vidgen-script/references/project-schema.md` (mục "Field craft chi tiết + PROMPT COMPILER").
+- **Gen clip (Stage 3):** flowgen dùng character + location anchor làm ref (≤3), đọc `prompt` đã compile.
 - Checklist gate: prompt có đủ 5 khối? style lặp nguyên văn? đặc điểm nhân vật nhắc lại? có
-  shot_size/camera_move rõ? không yêu cầu chữ trong hình?
+  shot_size/camera_move rõ? screen_direction nhất quán mạch? không yêu cầu chữ trong hình?
+  tỉ lệ vật-với-vật khớp style archetype (mục 2b)?
 
 ## Nguồn (verify 3-0, nguồn chính thức)
 
@@ -80,3 +131,4 @@ model phản hồi với negative CỤ THỂ:
 - cloud.google.com/blog/products/ai-machine-learning/ultimate-prompting-guide-for-veo-3-1 (5 phần)
 - james-palm.medium.com/veo3-camera-movements-shot-types-prompts (vựng camera/shot)
 - artlist.io/blog/negative-prompts-ai-video (negative cụ thể)
+- veo3ai.io/blog/veo-3-image-reference-workflow-2026 + medium.com/@yardenhazan (scale: anchor neo + forced perspective)

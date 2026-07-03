@@ -1,6 +1,6 @@
 ---
 name: vidgen-character
-description: STAGE 2 của pipeline vidgen — tạo NHÂN VẬT NHẤT QUÁN cho video AI: char sheet → ảnh anchor (T2I flow-agent, miễn phí) → upload lấy media_id → gen 1 clip thử → GATE character lock. Dùng khi cần "tạo nhân vật cho video", "anchor nhân vật", "char sheet", "nhân vật bị đổi mặt giữa các cảnh", "giữ nhân vật giống nhau", hoặc khi vidgen-flow gọi STEP 2.
+description: STAGE 2 của pipeline vidgen — tạo NHÂN VẬT + BỐI CẢNH NHẤT QUÁN cho video AI: char sheet → ảnh anchor (T2I flow-agent, miễn phí) → location anchor (khoá bối cảnh, Grid Method 3×3) → upload lấy media_id → gen 1 clip thử → GATE character lock. Dùng khi cần "tạo nhân vật cho video", "anchor nhân vật", "char sheet", "khoá bối cảnh", "nhân vật/bối cảnh bị đổi giữa các cảnh", "giữ nhân vật giống nhau", hoặc khi vidgen-flow gọi STEP 2.
 ---
 
 # Vidgen Character (char sheet → anchor → character lock)
@@ -41,6 +41,35 @@ Lệnh in ra `media_id` → ghi ngay vào `characters[].anchors[]` trong manifes
 mà bạn muốn giữ → **cập nhật `characters[].desc` cho khớp anchor**. Desc là nguồn sự thật đưa vào
 prompt mọi cảnh; lệch anchor sẽ làm các cảnh sau mâu thuẫn với nhân vật.
 
+## Bước 2b · Location anchor — KHOÁ BỐI CẢNH (chống "mỗi cảnh một kiểu quán")
+
+Nhân vật giữ mặt nhờ anchor; **bối cảnh cũng cần anchor** — nếu không, cùng "quán cà phê" mỗi cảnh
+Veo vẽ một kiểu (đổi cửa sổ, đổi bàn ghế, đổi ánh sáng). Với mỗi `locations[]` trong manifest:
+
+**Grid Method 3×3 (nguồn: CinematicHubClone) — gen NHIỀU góc bối cảnh trong 1 lần render**, nên
+cùng ánh sáng/chi tiết → đồng nhất tuyệt đối, lại rẻ (1 credit thay vì 9). Dùng làm sheet duyệt:
+```bash
+$PY $GEN t2i --prompt "3x3 grid of 9 frames of THE SAME location from different angles \
+(wide, corner, over-the-shoulder, low, high...), <location desc EN>, no people, \
+consistent lighting and props across all 9 frames, <style chung>" \
+  --aspect landscape --out projects/<tên>/02_locations/<id>_grid.png
+```
+Rồi gen **từng location anchor riêng** (KHÔNG người, style chung) để lấy media_id cho máy bám:
+```bash
+$PY $GEN t2i --prompt "<location desc EN>, wide establishing view, no people, \
+consistent props, <style chung>" --aspect landscape \
+  --out projects/<tên>/02_locations/<id>_wide.png
+```
+Yêu cầu location anchor: **KHÔNG có người · nền/bối cảnh đầy đủ · style + ánh sáng đồng bộ**.
+> **Neo TỈ LỆ tại đây:** scale vật-với-vật dựng trong location anchor (vd cây khổng lồ cạnh
+> người) được Veo **bảo toàn qua mọi cảnh**. Muốn tỉ lệ lệch-thực NHẤT QUÁN theo style archetype
+> (`vidgen-clips/references/veo-prompt-craft.md` mục 2b) → bake sẵn vào anchor, đừng chỉ dựa prompt keyword (dễ trôi).
+Ghi `media_id` vào `locations[].anchors[]`. Cảnh trỏ `scenes[].location: "<id>"` → flowgen dùng
+location anchor + character anchor cùng lúc làm ref (tổng ≤ 3 ref/prompt), compiler lặp nguyên văn
+`desc` bối cảnh vào `[Context]`.
+> **Scene-as-asset** (CinematicHubClone): gom tối đa hành động vào CÙNG một location để đỡ vỡ
+> consistency; đổi location thì chuyển qua yếu tố môi trường (mây → mây phủ rừng), đừng nhảy đột ngột.
+
 ## Bước 3 · Clip thử (đốt credit NHỎ trước khi đốt LỚN)
 
 Gen thử 1 cảnh tiêu biểu có nhân vật (chọn cảnh giữa video, đủ đại diện):
@@ -55,9 +84,12 @@ mặt biến dạng)?
 ## Bước 4 · GATE 2 (character lock)
 
 Trình user: char sheet + anchors + clip thử. **Tự-QC craft trước khi trình** (xem
-`references/consistency-and-ai-tells.md`):
+`references/consistency-and-ai-tells.md`) — chạy checklist ở góc *tìm lỗi*, rồi nêu thẳng
+điểm yếu còn lại thay vì xin gật (phản biện gate: `../vidgen-script/references/decision-grilling.md`),
+vd "frame nào của clip thử LỆCH anchor nhất — chấp nhận được không?":
 ☐ anchor 1-người/1-góc/nền trơn/rõ mặt ☐ clip thử giữ mặt khớp anchor qua các frame
 ☐ không AI-tell (thừa ngón, méo mặt, morphing) ☐ style đồng bộ giữa mọi anchor.
+☐ **tỉ lệ vật-với-vật khớp style archetype?** (tả thực = đúng đời thực; cách điệu = lệch có chủ đích, không phải lỗi).
 User gật → set `gates.character_lock = true`.
 Từ đây **danh tính nhân vật KHÓA** — không đổi desc/anchor giữa chừng; đổi = gen lại từ đầu.
 

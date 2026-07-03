@@ -22,6 +22,14 @@ Manifest là NGUỒN SỰ THẬT duy nhất về trạng thái dự án. Script 
     "file": ""                          // nhạc cụ thể (ưu tiên hơn mood; CLI --bgm override cả hai)
   },
 
+  "style": "",                          // (tùy chọn) STYLE CHUNG toàn dự án — art style + palette + medium/lens
+                                        // vd "3d donghua style, warm cinematic grading, shot on 35mm, 8k".
+                                        // Kèm QUY ƯỚC SCALE ở đây (tỉ lệ vật-với-vật do THẾ GIỚI quyết, không bắt
+                                        // buộc chuẩn đời thực): chọn 1 archetype (true_to_life/heroic/monumental/
+                                        // storybook/hero_product) → dán keyword mồi. Bảng: vidgen-clips/references/
+                                        // veo-prompt-craft.md mục 2b. Scale lệch-thực nhất quán → bake vào location anchor.
+                                        // compiler nhét NGUYÊN VĂN vào [Style & Ambiance] mọi cảnh → đồng bộ.
+
   "gates": {                            // 3 cổng human — orchestrator kiểm trước khi đi tiếp
     "script_lock": false,               // GATE 1: kịch bản + storyboard đã duyệt
     "character_lock": false,            // GATE 2: anchor + clip thử đã duyệt
@@ -40,20 +48,62 @@ Manifest là NGUỒN SỰ THẬT duy nhất về trạng thái dự án. Script 
     }
   ],
 
+  "locations": [                        // (tùy chọn) KHOÁ BỐI CẢNH — anchor môi trường, giữ setting đồng nhất
+    {                                   //            xuyên các cảnh cùng địa điểm (như anchor giữ nhân vật)
+      "id": "cafe",
+      "desc": "quán cà phê gỗ ấm, cửa sổ lớn phía đông, ánh nắng sớm, cây xanh",  // NHẮC LẠI trong prompt
+      "sheet": "02_locations/cafe_grid.png",   // Grid 3×3 nhiều góc trong 1 render — cho NGƯỜI duyệt (xem mục dưới)
+      "anchors": [                             // anchor bối cảnh — cho MÁY: nền địa điểm, KHÔNG người, style chung
+        { "angle": "wide",  "file": "02_locations/cafe_wide.png",  "media_id": "" },
+        { "angle": "corner", "file": "02_locations/cafe_corner.png", "media_id": "" }
+      ]
+    }
+  ],
+
   "scenes": [
     {
       "id": 1,
       "vo": "Lời đọc tiếng Việt của cảnh này.",   // rỗng nếu video không lời
-      "prompt": "English visual prompt: subject, action, camera, lighting, style. NO text overlay.",
+      "prompt": "",                     // prompt hình tiếng Anh. ĐỂ RỖNG → compiler tự ghép từ field craft
+                                        // bên dưới. Ghi tay = override luôn (compiler bỏ qua cảnh này).
       "mode": "i2v",                    // "i2v" (mặc định) | "t2v" | "r2v" | "fl"
       "duration": 8,                    // 4|6|8|10 — thời lượng gen; khi ráp sẽ setpts khớp lời đọc
       "characters": ["be_na"],          // id nhân vật xuất hiện → flowgen tự chọn anchor làm ref
       "angle": "front",                 // góc nhân vật trong cảnh → chọn anchor đúng góc
+      "location": "cafe",               // (tùy chọn) id trỏ locations[] → chọn location anchor + lặp desc bối cảnh
       "role": "hook",                   // (tùy chọn) vai trò mạch kể: hook|setup|development|turn|payoff|cta
+
+      // ── Field craft chi tiết (tùy chọn) — compiler ghép thành prompt Veo tự nhiên ──
+      "action": "a little girl reaches up and picks a ripe grape, smiling",  // HÀNH ĐỘNG chính (tiếng Anh, ngắn)
+                                        //   → khối [Action]. Đây là NỘI DUNG cảnh compiler KHÔNG tự bịa được.
+                                        //   Trống + prompt trống → compiler cảnh báo (không đủ liệu để ghép).
+      "emotion": "wonder",              // (tùy chọn) cảm xúc chủ đạo: fear|tension|power|joy|sadness|romance|
+                                        //   loneliness|chaos|calm|wonder — lighting/camera_angle/atmosphere bỏ
+                                        //   trống thì compiler AUTO-FILL theo bảng emotion-recipe.md.
       "shot_size": "medium",            // (tùy chọn) cỡ cảnh: wide|medium|close|extreme_close|establishing — ĐA DẠNG giữa các cảnh
+      "camera_angle": "eye_level",      // (tùy chọn) góc máy ĐIỆN ẢNH: eye_level|low|high|dutch|overhead|over_shoulder
+                                        //   (KHÁC `angle` ở trên — `angle` là góc NHÂN VẬT để chọn anchor)
       "camera_move": "push_in",         // (tùy chọn) chuyển máy: static|push_in|pull_out|pan|tilt|orbit|handheld|crane
+      "lighting": "golden_hour",        // (tùy chọn) preset ánh sáng: high_key|low_key|rembrandt|silhouette|rim|
+                                        //   golden_hour|blue_hour|chiaroscuro|soft|hard (trống → auto theo emotion)
+      "atmosphere": "",                 // (tùy chọn) khí quyển: rain|fog|smoke|god_rays|dust|snow|haze (trống → auto)
+      "lens": "",                       // (tùy chọn) ống kính: wide_24|35mm|50mm|85mm|macro
+      "sfx": ["gentle cafe ambience", "coffee cup clink"],   // (tùy chọn) hiệu ứng âm thanh — Veo 3 sinh audio đồng bộ
+      "dialogue": [                     // (tùy chọn) thoại NHÂN VẬT trong hình (Veo 3 lồng tiếng) — KHÁC `vo` (narration)
+        { "char": "be_na", "line": "Con tìm thấy rồi!" }
+      ],
+
+      // ── Continuity giữa cảnh (tùy chọn) — nối liền mạch, chống nhảy setting/đảo hướng ──
+      "screen_direction": "L2R",        // hướng chuyển động trên khung: L2R|R2L|toward|away|static (giữ nhất quán mạch)
+      "subject_position": "center",     // vị trí chủ thể: left|center|right — dùng cho match cut & nối vị trí
+      "match_cut_with": null,           // id cảnh khác cần nối hình-thái/chuyển động giống (match cut)
+      "link_prev": false,               // true → FRAME-CHAIN: lấy khung cuối NÉT của cảnh trước làm khung đầu
+                                        //   cảnh này (nối liền mạch). scene-clips gen TUẦN TỰ; cần clip cảnh
+                                        //   trước có sẵn. Bỏ ràng buộc "ảnh riêng đã duyệt" cho cảnh này.
+      "prompt_override": false,         // true → prompt viết tay, compiler KHÔNG đụng cảnh này
+
       "image": { "file": "03_images/scene01.png", "media_id": "", "approved": false },
-      "end_image": { "media_id": "" },  // chỉ mode "fl"
+      "end_image": { "media_id": "" },  // mode "fl", hoặc frame-chain đợt 2 (khung cuối cảnh này)
       "clip": { "file": "04_clips/scene01.mp4", "media_id": "", "status": "pending" },
       // clip.status: "pending" | "done" | "failed"
       "transition": { "type": "fade", "dur": 0.5 }
@@ -73,7 +123,8 @@ Manifest là NGUỒN SỰ THẬT duy nhất về trạng thái dự án. Script 
 projects/<tên>/
 ├── project.json        # manifest này
 ├── 01_script/          # brief.md + kichban.md (bản cho người đọc/duyệt)
-├── 02_characters/      # char sheet + anchors
+├── 02_characters/      # char sheet + anchors nhân vật
+├── 02_locations/       # grid bối cảnh + anchors location (khoá setting)
 ├── 03_images/          # ảnh khung đầu từng cảnh (T2I — miễn phí, gen tới khi ưng)
 ├── 04_clips/           # clip từng cảnh (I2V — tốn credit, chỉ gen sau khi duyệt ảnh)
 ├── 05_audio/           # narration.mp3 + subs.ass + timings.json
@@ -114,3 +165,46 @@ trước khi điền — đã lọc số liệu bịa, chỉ giữ kỹ thuật 
   `vidgen-clips/references/veo-prompt-craft.md`.
 - **`music.mood`** (project-level) — assemble tự chọn nhạc nền khớp mood từ `assets/bgm/`, hoặc
   `music.file` chỉ định tay. Chi tiết: `vidgen-assemble/references/caption-and-audio.md`.
+
+## Field craft chi tiết + PROMPT COMPILER (Mức 4 — TÙY CHỌN, backward-compatible)
+
+Mục tiêu: kịch bản **máy-đọc-được** — thay vì nhồi mọi thứ vào 1 ô `prompt` chữ tự do, tách thành
+field có cấu trúc để (a) QC tự động, (b) auto-fill từ tri thức điện ảnh, (c) giữ continuity. Toàn bộ
+đều **không bắt buộc**; thiếu thì hành xử y như Mức 3.
+
+**Cách compiler làm việc** (`flowgen compile-prompts`):
+`prompt` là field **DẪN XUẤT** do compiler sở hữu — muốn viết tay thì bật `prompt_override: true`.
+1. `prompt_override: true` → **giữ nguyên** prompt viết tay, bỏ qua. Đây là cách DUY NHẤT để viết prompt tay.
+   (Dự án Mức 3 cũ có `prompt` tay nhưng thiếu `action` → compiler cũng GIỮ, không xoá; nên set
+   `prompt_override` để chốt.)
+2. Ngược lại (có `action`) ghép `prompt` theo 5 khối Veo đúng thứ tự — **ghi đè**, nên đổi field rồi
+   chạy lại là prompt cập nhật (idempotent: cùng field → cùng prompt):
+   `[Cinematography] + [Subject] + [Action] + [Context] + [Style & Ambiance]`
+   - **[Cinematography]** ← `shot_size` + `camera_angle` + `camera_move` + `lens` + `screen_direction`.
+   - **[Subject]** ← `characters[].desc` (nhắc NGUYÊN VĂN) + `dialogue[]` (thoại trong ngoặc kép).
+   - **[Action]** ← `action` (mô tả hành động chính bằng tiếng Anh — người viết cấp, compiler không bịa).
+   - **[Context]** ← `locations[location].desc` (nhắc NGUYÊN VĂN) → khoá bối cảnh.
+   - **[Style & Ambiance]** ← `style` (project) + `lighting` + `atmosphere` + `sfx[]`.
+3. **Emotion auto-fill:** nếu `lighting`/`camera_angle`/`atmosphere` để trống mà có `emotion` →
+   compiler điền mặc định theo bảng `references/emotion-recipe.md`. Điền tay luôn thắng.
+4. Ghi kết quả vào `scenes[].prompt`. **Idempotent** — chạy lại không nhân đôi. GATE 1 duyệt prompt đã compile.
+
+**Nhóm field craft chi tiết (scene):**
+- **`emotion`** — cảm xúc chủ đạo; là "bộ não" auto-fill. Xem `emotion-recipe.md` để biết mỗi cảm
+  xúc kéo theo góc máy / ánh sáng / cỡ cảnh / atmosphere nào.
+- **`camera_angle`** — góc máy điện ảnh (eye_level/low/high/dutch/overhead/over_shoulder). ĐỪNG nhầm
+  với `angle` (góc NHÂN VẬT để flowgen chọn anchor).
+- **`lighting` / `atmosphere` / `lens`** — preset điện ảnh; trống thì auto theo `emotion`.
+- **`sfx[]`** — hiệu ứng âm thanh named-text để Veo 3 sinh audio đồng bộ (vd "footsteps on gravel").
+- **`dialogue[]`** — thoại NHÂN VẬT hiện trong hình (Veo lồng tiếng), tách khỏi `vo` (narration ElevenLabs).
+
+**Nhóm continuity (scene) — chống 2 lỗi kinh điển của video AI ghép cảnh:**
+- **`screen_direction`** — hướng chuyển động trên khung (L2R/R2L/toward/away/static). AI hay tự đảo
+  hướng giữa cảnh → ghi rõ để giữ mạch (luật 180°). Chi tiết: `vidgen-clips/references/veo-prompt-craft.md`.
+- **`subject_position`** + **`match_cut_with`** — nối vị trí chủ thể / match cut (2 cảnh trùng hình-thái).
+- **`location`** — khoá bối cảnh: trỏ `locations[]`, compiler lặp nguyên văn desc + flowgen dùng
+  location anchor. Giải bài "mỗi cảnh Veo vẽ một kiểu cùng một quán".
+- **`link_prev`** — frame-chaining (đã thực thi): `flowgen scene-clips` trích khung cuối NÉT nhất
+  (chọn theo Laplacian variance, chống motion-blur) của clip cảnh trước → upload → làm khung đầu cảnh
+  này. Gen TUẦN TỰ theo thứ tự manifest; cần clip cảnh trước tồn tại (cùng run hoặc run trước). Cảnh
+  `link_prev` không cần ảnh riêng đã duyệt. Cặp đổi bối cảnh hoàn toàn thì ĐỪNG bật (frame-chain vô nghĩa).
