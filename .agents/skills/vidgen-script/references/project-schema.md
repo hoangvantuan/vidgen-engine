@@ -23,6 +23,13 @@ Manifest là NGUỒN SỰ THẬT duy nhất về trạng thái dự án. Script 
     "file": ""                          // nhạc cụ thể (ưu tiên hơn mood; CLI --bgm override cả hai)
   },
 
+  "endcard_tagline": "",                // (tùy chọn) Ô BIẾN THIÊN 1 DÒNG của end-card brand — CONSUMER:
+                                        // make_props.py (Remotion overlay). Đổi theo phẩm chất video.
+                                        // Rỗng → fallback lấy defaultTagline của brand preset. Khung
+                                        // intro/end-card còn lại (logo bloom→watermark, hero nở, wordmark
+                                        // + url, nốt chuông, lời CTA) là CỐ ĐỊNH theo preset neo nhận diện
+                                        // — không tham số hoá. Brand nạp qua apply_brand.py --brand <tên>.
+
   "style": "",                          // (tùy chọn) STYLE CHUNG toàn dự án — art style + palette + medium/lens
                                         // vd "3d donghua style, warm cinematic grading, shot on 35mm, 8k".
                                         // DÙNG NEO CỤ THỂ (camera body/director/color grade), tránh vague
@@ -46,6 +53,10 @@ Manifest là NGUỒN SỰ THẬT duy nhất về trạng thái dự án. Script 
       "voice_id": "",                                          // (tùy chọn) ElevenLabs voice id RIÊNG cho thoại
                                                                //   nhân vật này (scenes[].dialogue[]). Rỗng → dùng
                                                                //   giọng narrator. Xem "Đa giọng" cuối file.
+      "voice_pitch": 0,                                        // (tùy chọn) dịch cao độ giọng nhân vật này (nửa cung).
+                                                               //   tts_to_ass.py ĐỌC & áp TỰ ĐỘNG (đường đa giọng),
+                                                               //   giữ nguyên độ dài → timestamp không xô. Narrator
+                                                               //   KHÔNG bị đụng. VD giọng bé: +2 (giọng kể ≠ giọng bé).
       "sheet": "02_characters/be_na_sheet.png",                 // char sheet — cho NGƯỜI duyệt, KHÔNG nạp vào Flow
       "anchors": [                                              // anchor — cho MÁY: 1 người/ảnh, 1 góc, nền trơn
         { "angle": "front", "file": "02_characters/be_na_front.png", "media_id": "" },

@@ -8,3 +8,6 @@ output/
 # dự án video (media nặng) — bỏ dòng này nếu muốn version cả dự án
 projects/
 .venv
+# brand: preview/demo tái tạo được — đừng để phình repo
+assets/brands/*/demo/
+assets/logo/_preview_*.jpg

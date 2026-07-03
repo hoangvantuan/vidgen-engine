@@ -77,18 +77,24 @@ Tùy chọn: `--no-burn` xuất KIT (base sạch + sub rời) giao CapCut · `--
 `--fonts-dir` nếu máy thiếu font tiếng Việt · `--light` xuất thêm bản share nhẹ `*_light.mp4`
 (CRF 26; thêm `--light-scale 720` để hạ 720p cho nhẹ nữa).
 
-## Bước 2b · Motion-graphics động (opt-in — Remotion)
+## Bước 2b · Bộ nhận diện thương hiệu — intro + end-card (Remotion, MỘT LỆNH)
 
-ffmpeg là LÕI ráp (đủ để xuất bản final). Muốn **title/hook động đẹp + end-card motion** thì phủ thêm
-lớp Remotion lên `final.mp4` (background `<Video>` + overlay, render 1 lần ra `final_overlay.mp4`):
+Sau khi có `06_final/final.mp4`, áp brand bằng **một lệnh** → `06_final/final_overlay.mp4` (bản bàn giao):
 ```bash
-cd .agents/skills/vidgen-assemble/remotion && npm install   # lần đầu
-$PY make_props.py --project ../../../projects/<tên> --endcard-text "Theo dõi để xem tiếp"
-npx remotion render VidgenOverlay ../../../projects/<tên>/06_final/final_overlay.mp4 --props=props.json
+$PY .agents/skills/vidgen-assemble/remotion/apply_brand.py --project projects/<tên> --brand <tên>
 ```
-`make_props.py` đo bản final (ffprobe) + copy bg/font vào `public/`; hookText tự lấy từ `hook.spoken`.
-Chi tiết + cách tinh chỉnh: `remotion/README.md`. Không cần motion-graphics → BỎ QUA bước này.
-Node deps KHÔNG commit (đã `.gitignore`). Chuẩn Remotion: skill `remotion-best-practices`.
+**Engine GENERIC — brand từ PRESET `assets/brands/<tên>/brand.json`, KHÔNG hardcode.** `apply_brand.py`
+tự lo (idempotent): ① `npm install` nếu thiếu; ② **sinh lời CTA khớp tagline** bằng ElevenLabs
+**`eleven_v3`** (model CÓ tiếng Việt — KHÔNG dùng `multilingual_v2`) từ giọng/spokenUrl của preset —
+tagline lấy `project.json endcard_tagline` (mặc định tái dùng `cta_default.mp3` của preset);
+③ tự lấy `ELEVENLABS_API_KEY` qua zsh nếu env thiếu (key không-export ở `~/.zshenv`);
+④ `make_props` + `remotion render`. Tùy chọn: `--tagline` · `--voice` · `--no-cta` · `--no-sonic`.
+
+Kết quả: **intro** logo loang màu nước → co về góc trên–trái thành **watermark** (không giây chết);
+**end-card** nền gradient ấm + **ảnh hero nảy nở** + tagline (biến thiên theo phẩm chất) + wordmark +
+url + nốt chuông + lời CTA. KHÔNG hiện hình đứa trẻ (chống over-promise, hiến pháp Mục 10).
+**Thêm brand khác:** tạo `assets/brands/<tên>/` (brand.json + 3 PNG trong suốt + sonic/cta) → `--brand <tên>`.
+Chi tiết: `remotion/README.md`. Node deps KHÔNG commit. Chuẩn Remotion: skill `remotion-best-practices`.
 
 ## Bước 3 · GATE 3 (final review)
 

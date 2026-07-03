@@ -68,7 +68,11 @@ TTS + **phụ đề karaoke** + timings → (tùy chọn `gen_sfx.py` gen SFX c�
 lời, auto-pick nhạc theo mood, ducking dịu, mix SFX layer, end-card). Muốn hiệu ứng âm thanh (gió, bước chân,
 trẻ cười) thì gen SFX vì assemble bỏ audio gốc Veo.
 **🚦 GATE 3:** trình final.mp4 + tự-QC (sub karaoke khớp, nhạc/ SFX không đè giọng, hook mạnh, không cụt).
-User gật → `gates.final_approved=true` → bàn giao.
+User gật → (tùy chọn) **áp bộ nhận diện thương hiệu** nếu dự án có brand preset:
+`apply_brand.py --project projects/<tên> --brand <tên>` → `06_final/final_overlay.mp4` (intro
+logo→watermark + end-card hero nở + CTA url). Cần preset `assets/brands/<tên>/` (xem `assets/brands/README.md`).
+Chi tiết: `vidgen-assemble` Bước 2b. → `gates.final_approved=true` → bàn giao bản cuối
+(`final_overlay.mp4` nếu áp brand, không thì `final.mp4`).
 
 ## Xử lý lỗi (chung mọi stage)
 

@@ -5,3 +5,6 @@ out/
 # Sinh khi chạy make_props.py — KHÔNG commit (bg video/font copy + props)
 public/
 props.json
+
+# Cache Remotion
+.remotion/

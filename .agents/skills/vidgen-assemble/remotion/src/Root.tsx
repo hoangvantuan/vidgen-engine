@@ -20,18 +20,28 @@ export const RemotionRoot = () => {
       fps={30}
       width={1080}
       height={1920}
-      durationInFrames={300}
+      durationInFrames={390}
       defaultProps={{
         bg: "bg.mp4",
-        durationInFrames: 300,
+        durationInFrames: 390,
+        contentDurationInFrames: 300,
+        endCardDurationInFrames: 90,
         fps: 30,
         width: 1080,
         height: 1920,
-        hookText: "",
-        endCardText: "",
-        titleDurationInFrames: 90,
-        endCardDurationInFrames: 90,
+        endcardTagline: "Tagline mẫu của brand.",
+        brandName: "Your Brand",
+        ctaUrl: "yourbrand.com",
+        colorBgTop: "#FDF6EC",
+        colorBgBottom: "#FBE4D2",
+        colorText: "#3E5A87",
+        logoLockup: "logo_lockup.png",
+        logoMark: "logo_mark.png",
+        heroImg: "hero.png",
+        heroAspect: "2048 / 2006",
         fontFile: "BeVietnamPro-Bold.ttf",
+        sonicFile: "",
+        ctaVoiceFile: "",
       }}
       calculateMetadata={calculateMetadata}
     />

@@ -123,6 +123,19 @@ def voice_map(m):
     return d
 
 
+def pitch_map(m):
+    """Map voice_id → semitone dịch cao độ (từ characters[].voice_pitch).
+    Cho phép MỖI GIỌNG một pitch riêng — vd giọng trẻ +2 mà narrator giữ 0.
+    Nhờ vậy đường đa giọng KHÔNG nâng nhầm narrator (giọng kể ≠ giọng nhân vật)."""
+    d = {}
+    for c in m.get("characters", []):
+        vid = (c.get("voice_id") or "").strip()
+        p = c.get("voice_pitch")
+        if vid and p:
+            d[vid] = float(p)
+    return d
+
+
 def scene_segments(scene, vmap, narrator, missing):
     """Trả danh sách (voice_id, text) cho 1 cảnh theo mô hình P1.
     - Có dialogue[] → mỗi lượt là 1 segment với giọng nhân vật (thiếu voice_id → fallback narrator).
@@ -173,6 +186,7 @@ def generate_per_scene(a, m, pdir, aspect, ec, vs):
     nên khớp chính xác với file nối — hợp đồng với assemble.py không đổi."""
     narrator = a.voice
     vmap = voice_map(m)
+    pmap = pitch_map(m)   # voice_id → semitone (vd giọng trẻ +2; narrator giữ 0)
     missing = set()
 
     w, h = RES.get(aspect, RES["portrait"])
@@ -208,8 +222,14 @@ def generate_per_scene(a, m, pdir, aspect, ec, vs):
             raw = work / f"seg{seg_i:03d}.mp3"
             wav = work / f"seg{seg_i:03d}.wav"
             raw.write_bytes(audio)
-            subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(raw),
-                            "-ar", "44100", "-ac", "1", str(wav)], check=True)
+            # pitch THEO GIỌNG: giọng nhân vật (characters[].voice_pitch); narrator dùng --pitch (mặc định 0)
+            sem = pmap.get(voice, a.pitch if voice == narrator else 0.0)
+            conv = ["ffmpeg", "-y", "-v", "error", "-i", str(raw), "-ar", "44100", "-ac", "1"]
+            af = pitch_af(sem)
+            if af:
+                conv += ["-af", af]
+            conv.append(str(wav))
+            subprocess.run(conv, check=True)
             d = probe_dur(wav)
             # gom từ của segment này, cộng offset toàn cục, gom dòng RIÊNG (không lẫn người nói)
             words = [(t, ws + offset, we + offset)
@@ -259,6 +279,15 @@ def generate_per_scene(a, m, pdir, aspect, ec, vs):
           f"({len(all_lines)} dòng) · timings: {out_timings}")
 
 
+def pitch_af(semitones, sr=44100):
+    """Filter ffmpeg dịch cao độ GIỮ NGUYÊN độ dài (asetrate nâng pitch+speed → atempo bù speed).
+    Nhờ độ dài không đổi, word-timestamp từ ElevenLabs vẫn khớp. None nếu semitones=0."""
+    if not semitones:
+        return None
+    p = 2 ** (semitones / 12.0)
+    return f"asetrate={sr}*{p:.6f},aresample={sr},atempo={1.0 / p:.6f}"
+
+
 def main():
     ap = argparse.ArgumentParser()
     src = ap.add_mutually_exclusive_group(required=True)
@@ -277,6 +306,9 @@ def main():
     ap.add_argument("--similarity", type=float, default=0.75)
     ap.add_argument("--style", type=float, default=0.3)
     ap.add_argument("--speed", type=float, default=1.0)
+    ap.add_argument("--pitch", type=float, default=0.0,
+                    help="dịch cao độ giọng theo nửa cung (semitone). +2 = trẻ/sáng hơn. "
+                         "Giữ NGUYÊN độ dài → timestamp/phụ đề không lệch. 0 = tắt.")
     ap.add_argument("--plain", action="store_true", help="phụ đề tĩnh (KHÔNG karaoke)")
     ap.add_argument("--highlight", default="yellow", choices=list(COLORS),
                     help="màu chữ đang đọc (karaoke). Mặc định yellow — tương phản tốt trên nền trắng")
@@ -355,6 +387,12 @@ def main():
     if not b64:
         raise SystemExit("ElevenLabs không trả audio_base64 — kiểm response/model.")
     open(out_audio, "wb").write(base64.b64decode(b64))
+    af = pitch_af(a.pitch)
+    if af:  # dịch cao độ GIỮ độ dài → alignment bên dưới vẫn khớp
+        tmp = out_audio + ".pitch.mp3"
+        subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", out_audio, "-af", af,
+                        "-c:a", "libmp3lame", "-q:a", "2", tmp], check=True)
+        os.replace(tmp, out_audio)
     al = r.alignment
     chars, st, en = al.characters, al.character_start_times_seconds, al.character_end_times_seconds
 
