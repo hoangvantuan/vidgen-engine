@@ -71,6 +71,7 @@ def main():
     ap.add_argument("--brand-config", required=True, help="đường dẫn brand.json (preset)")
     ap.add_argument("--final", help="đường dẫn final.mp4 (mặc định <project>/06_final/final.mp4)")
     ap.add_argument("--tagline", help="tagline end-card biến thiên (mặc định project.json endcard_tagline → preset defaultTagline)")
+    ap.add_argument("--intro-sec", type=float, default=2.0, help="thời lượng intro logo ĐỨNG RIÊNG ở đầu (giây); 0 = tắt intro")
     ap.add_argument("--endcard-sec", type=float, default=3.0, help="thời lượng end-card CỘNG THÊM (giây)")
     ap.add_argument("--sonic", help="file nốt chuông mềm — copy vào public/")
     ap.add_argument("--cta-voice", dest="cta_voice", help="file lời đọc CTA cuối — copy vào public/")
@@ -89,8 +90,9 @@ def main():
 
     dur, w, h, fps = probe(final)
     content_frames = round(dur * fps)
+    intro_frames = round(max(0.0, a.intro_sec) * fps)
     endcard_frames = round(a.endcard_sec * fps)
-    total_frames = content_frames + endcard_frames
+    total_frames = intro_frames + content_frames + endcard_frames
 
     tagline = a.tagline or m.get("endcard_tagline") or brand.get("defaultTagline", "")
 
@@ -129,6 +131,7 @@ def main():
     props = {
         "bg": "bg.mp4",
         "durationInFrames": total_frames,
+        "introDurationInFrames": intro_frames,
         "contentDurationInFrames": content_frames,
         "endCardDurationInFrames": endcard_frames,
         "fps": round(fps),
@@ -150,7 +153,7 @@ def main():
     }
     (HERE / "props.json").write_text(json.dumps(props, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"✓ props.json: {w}x{h} @ {round(fps)}fps")
-    print(f"  nội dung {content_frames}f ({dur:.1f}s) + end-card {endcard_frames}f ({a.endcard_sec:.1f}s) = {total_frames}f")
+    print(f"  intro {intro_frames}f ({max(0.0, a.intro_sec):.1f}s) + nội dung {content_frames}f ({dur:.1f}s) + end-card {endcard_frames}f ({a.endcard_sec:.1f}s) = {total_frames}f")
     print(f"  brand={brand.get('wordmark')!r} tagline={tagline!r}")
     print(f"  sonic: {sonic_file or '—'} | cta-voice: {cta_voice_file or '—'}")
     out = final.with_name("final_overlay.mp4")

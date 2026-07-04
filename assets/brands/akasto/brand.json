@@ -1,0 +1,10 @@
+{
+  "wordmark": "Akachan Story",
+  "ctaUrl": "akasto.com",
+  "spokenUrl": "akasto chấm com",
+  "voice": "",
+  "defaultTagline": "Mỗi câu chuyện là một hạt giống nhân cách.",
+  "colors": { "bgTop": "#FDF6EC", "bgBottom": "#FBE4D2", "text": "#4E6E9E" },
+  "assets": { "logoLockup": "logo_lockup.png", "logoMark": "logo_mark.png",
+              "hero": "hero.png", "sonic": "sonic_chime.mp3", "ctaDefault": "cta_default.mp3" }
+}

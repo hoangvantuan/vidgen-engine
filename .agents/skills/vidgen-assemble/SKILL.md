@@ -53,6 +53,12 @@ $PY $SK/assemble.py --project projects/<tên> --endcard cta.png   # nhạc tự 
 threshold 0.06, `--bgm-vol` mặc định **1.2**) — nhạc LÙI dưới giọng nhưng vẫn NGHE RÕ; nhạc còn nhỏ thì
 tăng `--bgm-vol`. Chưa có nhạc? **Tự gen bằng skill `music`** (ElevenLabs Music, composition plan theo cung
 cảm xúc) → xuất .mp3 vào `assets/bgm/<mood>/`.
+**Hợp đồng độ dài (bài học ranh giới, ĐÃ FIX):** giọng thường NGẮN hơn video (cảnh lặng + đuôi clip).
+`sidechaincompress` cắt output theo sidechain (giọng) → nhạc **tắt sớm** (từng bị: nhạc chết ở ~1:04 khi
+giọng hết). Fix tại nguồn: `apad` giọng tới HẾT video **trước** sidechain
+(`[1:a]apad=whole_dur=<total>,asplit=2[voc1][voc2]`) → nhạc phủ trọn; đoạn cuối không giọng thì nhạc vang
+đầy tự nhiên. `amix duration=longest/first` KHÔNG cứu được (vẫn theo track ngắn sau sidechain). Verify:
+`ffprobe -select_streams a:0 -show_entries stream=duration` phải ≈ độ dài video.
 
 **SFX — lớp thứ 3 (consumer cho `scenes[].sfx[]`):** clip Veo TỰ sinh audio nhưng assemble luôn `-an`
 (Veo hay lồng giọng-bịa tiếng Anh đè lời đọc). Muốn có hiệu ứng (gió, bước chân, khói hương, trẻ cười)
@@ -88,11 +94,14 @@ tự lo (idempotent): ① `npm install` nếu thiếu; ② **sinh lời CTA kh�
 **`eleven_v3`** (model CÓ tiếng Việt — KHÔNG dùng `multilingual_v2`) từ giọng/spokenUrl của preset —
 tagline lấy `project.json endcard_tagline` (mặc định tái dùng `cta_default.mp3` của preset);
 ③ tự lấy `ELEVENLABS_API_KEY` qua zsh nếu env thiếu (key không-export ở `~/.zshenv`);
-④ `make_props` + `remotion render`. Tùy chọn: `--tagline` · `--voice` · `--no-cta` · `--no-sonic`.
+④ `make_props` + `remotion render`. Tùy chọn: `--tagline` · `--voice` · `--intro-sec` · `--no-cta` · `--no-sonic`.
 
-Kết quả: **intro** logo loang màu nước → co về góc trên–trái thành **watermark** (không giây chết);
+Kết quả: **intro** logo loang màu nước **đứng riêng** trên nền gradient brand (chạy trọn ~2s rồi
+**fade qua màu nền** sang cảnh chính — KHÔNG đè lên hook), phần nội dung để **sạch** (bỏ watermark);
 **end-card** nền gradient ấm + **ảnh hero nảy nở** + tagline (biến thiên theo phẩm chất) + wordmark +
 url + nốt chuông + lời CTA. KHÔNG hiện hình đứa trẻ (chống over-promise, hiến pháp Mục 10).
+Độ dài intro chỉnh qua `--intro-sec` hoặc `project.json intro_sec`; **`--intro-sec 0` = tắt intro**
+(dùng cho bản short-form cần front-load hook ngay giây 0 — đánh đổi: mất nhận diện brand đầu video).
 **Thêm brand khác:** tạo `assets/brands/<tên>/` (brand.json + 3 PNG trong suốt + sonic/cta) → `--brand <tên>`.
 Chi tiết: `remotion/README.md`. Node deps KHÔNG commit. Chuẩn Remotion: skill `remotion-best-practices`.
 

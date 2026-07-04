@@ -14,7 +14,8 @@ import { Audio, Video } from "@remotion/media";
 // Preset brand nằm ở assets/brands/<tên>/brand.json — apply_brand.py nạp vào props.
 export type VidgenOverlayProps = {
   bg: string; // final.mp4 (đã có sub/nhạc/giọng) — Python copy vào public/bg.mp4
-  durationInFrames: number; // TỔNG = nội dung + end-card (đã cộng thêm)
+  durationInFrames: number; // TỔNG = intro + nội dung + end-card (đã cộng thêm)
+  introDurationInFrames: number; // intro logo ĐỨNG RIÊNG ở đầu (0 = tắt intro)
   contentDurationInFrames: number; // độ dài bản final nội dung (bg.mp4)
   endCardDurationInFrames: number; // phần end-card CỘNG THÊM ở cuối
   fps: number;
@@ -56,21 +57,29 @@ const riseAt = (frame: number, fps: number, startSec: number) =>
     easing: BEZIER,
   });
 
-// ── INTRO: logo loang màu nước (bloom) → co nhỏ, trượt về góc trên–trái ─────────
-// Nội dung/lời đọc đã chạy từ giây 0 (bg). Logo chỉ là lớp trồi lên rồi LẮNG vào watermark.
-const IntroLogo: React.FC<{ src: string }> = ({ src }) => {
+// ── INTRO ĐỨNG RIÊNG: logo loang màu nước (bloom) trên NỀN GRADIENT BRAND ────────
+// KHÔNG đè lên cảnh. Chiếm [0, intro+fade]: giây cuối cả nền lẫn logo mờ 1→0 để
+// cảnh chính (chạy bên dưới từ mốc `intro`) lộ ra — bàn giao "fade qua màu nền".
+const IntroSegment: React.FC<{
+  src: string;
+  introFrames: number;
+  fadeFrames: number;
+  colorBgTop: string;
+  colorBgBottom: string;
+}> = ({ src, introFrames, fadeFrames, colorBgTop, colorBgBottom }) => {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const bloomIn = 0.5 * fps;
-  const hold = 1.2 * fps;
-  const settle = 1.7 * fps;
+  const logoOut = introFrames - 0.35 * fps; // logo tắt TRƯỚC khi nền wash mờ đi
 
-  const opacity = interpolate(frame, [0, bloomIn, hold, settle], [0, 1, 1, 0], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-    easing: BEZIER,
-  });
-  const scale = interpolate(frame, [0, bloomIn, settle], [0.62, 1, 0.72], {
+  // Logo: loang nét dần rồi giữ, tắt hẳn trước mốc `intro`.
+  const logoOpacity = interpolate(
+    frame,
+    [0, bloomIn, logoOut, introFrames],
+    [0, 1, 1, 0],
+    { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: BEZIER },
+  );
+  const scale = interpolate(frame, [0, bloomIn, introFrames], [0.62, 1, 1.05], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
     easing: BEZIER,
@@ -79,48 +88,38 @@ const IntroLogo: React.FC<{ src: string }> = ({ src }) => {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
-  const tx = interpolate(frame, [hold, settle], [0, -0.24], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-    easing: BEZIER,
-  });
-  const ty = interpolate(frame, [hold, settle], [0, -0.28], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-    easing: BEZIER,
-  });
+  // Nền gradient: mờ 1→0 ở đúng `fadeFrames` cuối → cảnh bên dưới lộ ra (crossfade).
+  const bgOpacity = interpolate(
+    frame,
+    [introFrames, introFrames + fadeFrames],
+    [1, 0],
+    { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: BEZIER },
+  );
   return (
-    <AbsoluteFill style={{ justifyContent: "center", alignItems: "center" }}>
+    <AbsoluteFill
+      style={{
+        opacity: bgOpacity,
+        background: `linear-gradient(180deg, ${colorBgTop} 0%, ${colorBgBottom} 100%)`,
+        justifyContent: "center",
+        alignItems: "center",
+      }}
+    >
       <Img
         src={staticFile(src)}
         style={{
           width: "52%",
-          opacity,
+          opacity: logoOpacity,
           filter: `blur(${blur}px)`,
-          transform: `translate(${tx * 100}%, ${ty * 100}%) scale(${scale})`,
+          transform: `scale(${scale})`,
         }}
       />
     </AbsoluteFill>
   );
 };
 
-// ── WATERMARK: biểu tượng mờ, tĩnh, góc trên–trái, suốt phần nội dung ───────────
-const Watermark: React.FC<{ src: string }> = ({ src }) => {
-  const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
-  const opacity = interpolate(frame, [0, 0.5 * fps], [0, 0.42], {
-    extrapolateLeft: "clamp",
-    extrapolateRight: "clamp",
-    easing: BEZIER,
-  });
-  return (
-    <AbsoluteFill style={{ justifyContent: "flex-start", alignItems: "flex-start" }}>
-      <Img src={staticFile(src)} style={{ width: "13%", opacity, margin: "3.5% 0 0 4%" }} />
-    </AbsoluteFill>
-  );
-};
-
-// ── Chân end-card dùng chung: tagline + wordmark + url (mốc giây tuỳ template) ───
+// ── Chân end-card: tagline → gạch phân cách mảnh → wordmark → url, GOM thành CỤM ──
+// Bố cục PACKED (bỏ marginTop:auto vốn tách wordmark xuống đáy gây "hố trống" giữa).
+// Cả cụm căn giữa dọc trong EndCard → nhịp cân đối, không khoảng cream rỗng.
 const BrandFooter: React.FC<{
   tagline: string;
   brandName: string;
@@ -131,32 +130,51 @@ const BrandFooter: React.FC<{
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   return (
-    <>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        width: "100%",
+        marginTop: "5%",
+      }}
+    >
       <div
         style={{
           opacity: fadeAt(frame, fps, t),
           transform: `translateY(${riseAt(frame, fps, t)}px)`,
-          maxWidth: "80%",
-          marginTop: "3%",
+          maxWidth: "82%",
           textAlign: "center",
           fontFamily: FONT,
           fontWeight: 700,
-          fontSize: "clamp(30px, 4.4vw, 64px)",
-          lineHeight: 1.25,
+          fontSize: "clamp(30px, 4.6vw, 66px)",
+          lineHeight: 1.28,
           color,
         }}
       >
         {tagline}
       </div>
+      {/* Gạch phân cách mảnh — tạo nhịp + cảm giác premium, lấp khoảng trống giữa */}
+      <div
+        style={{
+          opacity: fadeAt(frame, fps, t + 0.35) * 0.5,
+          width: "clamp(72px, 12vw, 168px)",
+          height: 3,
+          borderRadius: 3,
+          marginTop: "5.5%",
+          background: color,
+        }}
+      />
       <div
         style={{
           opacity: fadeAt(frame, fps, t + 0.5),
           transform: `translateY(${riseAt(frame, fps, t + 0.5)}px)`,
-          marginTop: "auto",
+          marginTop: "5.5%",
           textAlign: "center",
           fontFamily: FONT,
           fontWeight: 700,
-          fontSize: "clamp(44px, 6.6vw, 104px)",
+          fontSize: "clamp(46px, 6.8vw, 108px)",
+          lineHeight: 1.05,
           color,
         }}
       >
@@ -164,9 +182,9 @@ const BrandFooter: React.FC<{
       </div>
       <div
         style={{
-          opacity: fadeAt(frame, fps, t + 0.8) * 0.85,
-          transform: `translateY(${riseAt(frame, fps, t + 0.8)}px)`,
-          marginBottom: "12%",
+          opacity: fadeAt(frame, fps, t + 0.75) * 0.85,
+          transform: `translateY(${riseAt(frame, fps, t + 0.75)}px)`,
+          marginTop: "1.8%",
           textAlign: "center",
           fontFamily: FONT,
           fontWeight: 700,
@@ -177,7 +195,7 @@ const BrandFooter: React.FC<{
       >
         {ctaUrl}
       </div>
-    </>
+    </div>
   );
 };
 
@@ -214,15 +232,16 @@ const EndCard: React.FC<
       style={{
         opacity: bgOpacity,
         background: `linear-gradient(180deg, ${colorBgTop} 0%, ${colorBgBottom} 100%)`,
-        justifyContent: "flex-start",
+        flexDirection: "column",
+        justifyContent: "center", // cả cụm (hero + chữ) căn giữa dọc → hết "hố trống"
         alignItems: "center",
+        paddingBottom: "2%",
       }}
     >
       <div
         style={{
           width: "100%",
-          height: "60%",
-          marginTop: "6%",
+          height: "50%",
           display: "flex",
           justifyContent: "center",
           alignItems: "flex-end",
@@ -243,37 +262,43 @@ const EndCard: React.FC<
           <Img src={staticFile(p.heroImg)} style={{ width: "100%", height: "100%", display: "block" }} />
         </div>
       </div>
-      <BrandFooter tagline={p.tagline} brandName={p.brandName} ctaUrl={p.ctaUrl} color={p.color} t={1.0} />
+      <BrandFooter tagline={p.tagline} brandName={p.brandName} ctaUrl={p.ctaUrl} color={p.color} t={0.9} />
     </AbsoluteFill>
   );
 };
 
 export const VidgenOverlay: React.FC<VidgenOverlayProps> = (props) => {
   const { fps } = useVideoConfig();
+  const intro = props.introDurationInFrames; // 0 = tắt intro (bg về mốc 0)
   const content = props.contentDurationInFrames;
-  const wmStart = Math.round(1.5 * fps);
+  const fade = Math.round(0.3 * fps); // handoff crossfade intro→cảnh chính
+  const contentStart = intro; // cảnh chính bắt đầu SAU khi intro chạy trọn
+  const endCardStart = intro + content;
 
   return (
     <AbsoluteFill style={{ backgroundColor: props.colorBgTop }}>
       <FontFace file={props.fontFile} />
 
-      {/* Nền: bản final ffmpeg (giọng + sub + nhạc). Chỉ phủ phần NỘI DUNG. */}
-      <Sequence from={0} durationInFrames={content} layout="none">
+      {/* Nền: bản final ffmpeg (giọng + sub + nhạc). Bắt đầu SAU intro, không đè. */}
+      <Sequence from={contentStart} durationInFrames={content} layout="none">
         <Video src={staticFile(props.bg)} />
       </Sequence>
 
-      {/* Intro logo bloom → lắng vào watermark (chỉ trong phần nội dung) */}
-      <Sequence from={0} durationInFrames={content} layout="none">
-        <IntroLogo src={props.logoLockup} />
-      </Sequence>
-
-      {/* Watermark tĩnh: hiện sau khi intro lắng (~1.5s) tới hết nội dung */}
-      <Sequence from={wmStart} durationInFrames={Math.max(1, content - wmStart)} layout="none">
-        <Watermark src={props.logoMark} />
-      </Sequence>
+      {/* INTRO ĐỨNG RIÊNG: logo bloom trên nền gradient; giây cuối fade lộ cảnh chính */}
+      {intro > 0 ? (
+        <Sequence from={0} durationInFrames={intro + fade} layout="none">
+          <IntroSegment
+            src={props.logoLockup}
+            introFrames={intro}
+            fadeFrames={fade}
+            colorBgTop={props.colorBgTop}
+            colorBgBottom={props.colorBgBottom}
+          />
+        </Sequence>
+      ) : null}
 
       {/* END-CARD: cộng thêm ở cuối (nền brand + hero nở + wordmark + url) */}
-      <Sequence from={content} durationInFrames={props.endCardDurationInFrames} layout="none">
+      <Sequence from={endCardStart} durationInFrames={props.endCardDurationInFrames} layout="none">
         <EndCard
           tagline={props.endcardTagline}
           brandName={props.brandName}
@@ -286,23 +311,23 @@ export const VidgenOverlay: React.FC<VidgenOverlayProps> = (props) => {
         />
       </Sequence>
 
-      {/* Âm thanh — nốt chuông intro (duck dưới lời, vol thấp) */}
+      {/* Âm thanh — nốt chuông intro: ngân ngay đầu, trên nền intro (không đè lời) */}
       {props.sonicFile ? (
         <Sequence from={0} layout="none">
-          <Audio src={staticFile(props.sonicFile)} volume={0.28} />
+          <Audio src={staticFile(props.sonicFile)} volume={0.4} />
         </Sequence>
       ) : null}
 
       {/* Lời CTA cuối — bg đã hết nên phát sạch */}
       {props.ctaVoiceFile ? (
-        <Sequence from={content + Math.round(0.25 * fps)} layout="none">
+        <Sequence from={endCardStart + Math.round(0.25 * fps)} layout="none">
           <Audio src={staticFile(props.ctaVoiceFile)} />
         </Sequence>
       ) : null}
 
       {/* Nốt chuông đóng khung — ngân gần cuối end-card, không chồng lời */}
       {props.sonicFile ? (
-        <Sequence from={content + props.endCardDurationInFrames - Math.round(1.0 * fps)} layout="none">
+        <Sequence from={endCardStart + props.endCardDurationInFrames - Math.round(1.0 * fps)} layout="none">
           <Audio src={staticFile(props.sonicFile)} volume={0.5} />
         </Sequence>
       ) : null}

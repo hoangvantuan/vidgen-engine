@@ -3,8 +3,9 @@
 """apply_brand.py — MỘT LỆNH áp bộ nhận diện thương hiệu lên bản ráp cuối.
 
 Engine GENERIC: brand đến từ PRESET `assets/brands/<tên>/brand.json` (--brand bắt buộc chỉ định).
-Từ `<project>/06_final/final.mp4` → `final_overlay.mp4`: intro logo → watermark + end-card
-(hero nở + tagline + wordmark + url) + nốt chuông + lời CTA.
+Từ `<project>/06_final/final.mp4` → `final_overlay.mp4`: intro logo ĐỨNG RIÊNG (nền gradient
+brand, chạy trọn ~2s rồi fade sang cảnh chính, KHÔNG đè) + end-card (hero nở + tagline +
+wordmark + url) + nốt chuông + lời CTA. Tắt intro: `--intro-sec 0`.
 
 Tự lo mọi tiền đề (fail-fast, idempotent):
   1. node_modules — thiếu thì `npm install`.
@@ -19,6 +20,7 @@ Tùy chọn:
   --brand <tên>                            # preset ở assets/brands/<tên>/ (BẮT BUỘC)
   --tagline "Câu tagline end-card"         # override; mặc định project.json endcard_tagline → preset
   --voice <id>                             # override giọng CTA (mặc định lấy từ brand.json)
+  --intro-sec <giây>                       # độ dài intro riêng; mặc định project.json intro_sec → 2.0; 0 = tắt
   --no-cta / --no-sonic
 """
 from __future__ import annotations
@@ -102,6 +104,8 @@ def main() -> None:
     ap.add_argument("--brand", required=True, help="preset ở assets/brands/<tên>/")
     ap.add_argument("--tagline")
     ap.add_argument("--voice")
+    ap.add_argument("--intro-sec", type=float, default=None,
+                    help="thời lượng intro logo đứng riêng (giây); mặc định project.json intro_sec → 2.0; 0 = tắt")
     ap.add_argument("--no-cta", action="store_true")
     ap.add_argument("--no-sonic", action="store_true")
     a = ap.parse_args()
@@ -141,9 +145,12 @@ def main() -> None:
     if cta_path:
         endcard_sec = round(probe_dur(cta_path) + 1.2, 1)
 
+    intro_sec = a.intro_sec if a.intro_sec is not None else float(manifest.get("intro_sec", 2.0))
+
     sonic = brand_dir / assets.get("sonic", "sonic_chime.mp3")
     args = [sys.executable, str(HERE / "make_props.py"), "--project", str(pdir),
-            "--brand-config", str(brand_cfg), "--tagline", tagline, "--endcard-sec", str(endcard_sec)]
+            "--brand-config", str(brand_cfg), "--tagline", tagline,
+            "--intro-sec", str(intro_sec), "--endcard-sec", str(endcard_sec)]
     if sonic.exists() and not a.no_sonic:
         args += ["--sonic", str(sonic)]
     if cta_path:

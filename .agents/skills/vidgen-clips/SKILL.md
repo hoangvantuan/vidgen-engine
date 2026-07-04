@@ -58,8 +58,15 @@ và dùng transition biên tập (cut/match cut) ở Stage 4.
 ## Bước 3 · QC nhanh trước khi sang ráp
 
 Xem từng clip trong `04_clips/`: ☐ nhân vật khớp anchor ☐ chuyển động không giật/AI-tell
-☐ không chữ lạ trong hình ☐ đúng aspect ☐ cỡ cảnh đa dạng giữa các cảnh. Clip hỏng → sửa prompt
-cảnh đó → `--scene N --regen`; hoặc CHỈ lỗi nhỏ → sửa bằng **v2v** (mục "Lệnh lẻ") khỏi gen lại cả clip.
+☐ không chữ lạ trong hình ☐ đúng aspect ☐ cỡ cảnh đa dạng giữa các cảnh ☐ **không còn dấu watermark**.
+Clip hỏng → sửa prompt cảnh đó → `--scene N --regen`; hoặc CHỈ lỗi nhỏ → sửa bằng **v2v** (mục "Lệnh lẻ").
+
+**Watermark Veo sót → delogo trước khi ráp (bài học ranh giới, vị trí CỐ ĐỊNH):** dù pipeline đã "xóa
+watermark", Veo/Flow vẫn để sót **ngôi sao 4 cánh (sparkle ✦)** góc dưới–phải. Vị trí ổn định trên khung
+gốc **720×1280**: `delogo=x=572:y=1128:w=92:h=104`. Trước khi assemble, delogo mọi clip (backup gốc):
+`ffmpeg -i raw.mp4 -vf "delogo=x=572:y=1128:w=92:h=104" -c:v libx264 -crf 18 out.mp4`. Soi lại 2-3 clip
+sau delogo (crop góc dưới–phải) để chắc phủ đúng — Flow đổi version có thể dịch vị trí. Regen clip là phải
+delogo LẠI (clip mới có watermark).
 
 ## Lệnh lẻ (ngoài pipeline)
 

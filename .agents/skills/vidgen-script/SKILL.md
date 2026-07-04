@@ -66,6 +66,18 @@ trước khi viết file này** (quy tắc field, độ dài VO khớp duration,
 (nếu khoá bối cảnh), `style` chung, scenes. Mặc định `mode: "i2v"` (ảnh duyệt trước, rẻ) — cảnh
 thuần bối cảnh không nhân vật thì `t2v`.
 
+**Đạo cụ BIẾN THIÊN không bake vào `desc` (bài học ranh giới anchor↔cốt truyện):** `characters[].desc`
+(và anchor) chỉ giữ cái **BẤT BIẾN** — mặt, tóc, trang phục khoá. Vật thể/đạo cụ **thay đổi theo mạch**
+(vd hạt giống → nảy mầm; cầm đồ vật rồi đặt xuống) phải khai báo **per-scene trong `action`**, KHÔNG nhét
+vào `desc`. Bake đạo cụ biến thiên vào desc/anchor → compiler lặp nó MỌI cảnh → hình ra sai (mầm hiện
+trước khi nở, phá payoff bất ngờ). Cần "không có X" ở vài cảnh thì ghi phủ định trong `action` ("a round
+seed, NOT a sprout, no leaves").
+
+**Prompt ẢNH ≠ prompt CLIP (bài học `dialogue[]`→bong bóng chữ):** compiler nhét `the character says "…"`
+vào `prompt` để Veo diễn khẩu hình — nhưng `scene-images` (T2I) dùng CHUNG prompt đó nên AI **vẽ speech
+bubble chữ** trong ảnh. Cảnh có `dialogue[]` → sau compile, **bỏ cụm `the character says "…"` khỏi
+`prompt` + set `prompt_override:true`** (giữ khẩu hình qua `action` "whispering"). Ảnh sạch, clip vẫn dub.
+
 **Cảnh có thoại nhân vật (đa giọng):** điền `dialogue[]` (`{char, line}`) + gán `characters[].voice_id`
 cho nhân vật đó. **Mô hình P1: cảnh có `dialogue[]` thì để trống `vo`** (mỗi cảnh 1 kiểu tiếng); đan
 xen kể–thoại thì tách cảnh. Consumer tự kích hoạt đường đa giọng khi thấy `dialogue[]`. Chi tiết:

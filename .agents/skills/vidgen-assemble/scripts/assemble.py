@@ -298,10 +298,13 @@ def main():
             cmd += ["-stream_loop", "-1", "-i", bgm]
             # ducking dịu (ratio 3:1, threshold 0.06) — nhạc LÙI dưới giọng nhưng vẫn NGHE RÕ.
             # Default cũ ratio=4/threshold=0.03 nén nhạc gần như tắt vì giọng đọc gần liên tục.
-            fc.append(f"[2:a]volume={a.bgm_vol}[b];[b][1:a]sidechaincompress="
+            # Pad giọng tới hết video TRƯỚC sidechain — nếu không, sidechaincompress dừng khi
+            # narration hết (giọng ngắn hơn nhạc) → nhạc bị cắt sớm. Sau khi giọng hết, [voc] im
+            # nên nhạc hết bị ducking → vang đầy tự nhiên tới cuối.
+            fc.append(f"[1:a]apad=whole_dur={total:.3f},asplit=2[voc1][voc2];"
+                      f"[2:a]volume={a.bgm_vol}[b];[b][voc1]sidechaincompress="
                       f"threshold=0.06:ratio=3:attack=15:release=300[duck];"
-                      f"[1:a][duck]amix=inputs=2:duration=first:dropout_transition=0,"
-                      f"apad=pad_dur={a.tail}[aout]")
+                      f"[voc2][duck]amix=inputs=2:duration=first:dropout_transition=0[aout]")
             amap = "[aout]"
         else:
             amap = "1:a"
