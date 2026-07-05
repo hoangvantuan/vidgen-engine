@@ -40,11 +40,14 @@ Manifest là NGUỒN SỰ THẬT duy nhất về trạng thái dự án. Script 
                                         // veo-prompt-craft.md mục 2b. Scale lệch-thực nhất quán → bake vào location anchor.
                                         // compiler nhét NGUYÊN VĂN vào [Style & Ambiance] mọi cảnh → đồng bộ.
 
-  "gates": {                            // 3 cổng human — orchestrator kiểm trước khi đi tiếp
-    "script_lock": false,               // GATE 1: kịch bản + storyboard đã duyệt
+  "gates": {                            // 4 cổng human — orchestrator kiểm trước khi đi tiếp
+    "story_lock": false,                // GATE 1A: KỊCH BẢN (through-line/mạch/hook/lời VO) đã duyệt — CHẶN dựng storyboard
+    "script_lock": false,               // GATE 1B: storyboard/prompt (field/cỡ cảnh/continuity) đã duyệt
     "character_lock": false,            // GATE 2: anchor + clip thử đã duyệt
     "final_approved": false             // GATE 3: bản ráp cuối đã duyệt
   },
+  // Backward-compat: dự án cũ THIẾU story_lock → orchestrator coi như đã mở (không chặn luồng cũ).
+  // Luật gen: story_lock=false → CẤM sang Bước 3 (dựng storyboard/compile). script_lock=false → CẤM gen.
 
   "characters": [
     {
@@ -207,7 +210,7 @@ field có cấu trúc để (a) QC tự động, (b) auto-fill từ tri thức �
    - **[Style & Ambiance]** ← `style` (project) + `lighting` + `atmosphere` + `sfx[]`.
 3. **Emotion auto-fill:** nếu `lighting`/`camera_angle`/`atmosphere` để trống mà có `emotion` →
    compiler điền mặc định theo bảng `references/emotion-recipe.md`. Điền tay luôn thắng.
-4. Ghi kết quả vào `scenes[].prompt`. **Idempotent** — chạy lại không nhân đôi. GATE 1 duyệt prompt đã compile.
+4. Ghi kết quả vào `scenes[].prompt`. **Idempotent** — chạy lại không nhân đôi. GATE 1B (`script_lock`) duyệt prompt đã compile — chỉ chạy compile SAU khi kịch bản đã qua GATE 1A (`story_lock`).
 
 **Nhóm field craft chi tiết (scene):**
 - **`emotion`** — cảm xúc chủ đạo; là "bộ não" auto-fill. Xem `emotion-recipe.md` để biết mỗi cảm

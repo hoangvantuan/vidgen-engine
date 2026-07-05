@@ -58,7 +58,21 @@ tiếng. **Test xuyên suốt: ĐỌC TO** — vấp/nghe như văn viết thì 
 narrator đọc `vo`, mỗi nhân vật một giọng riêng đọc `dialogue[]`. Kiểu dub (KHÔNG khớp miệng). Cách
 khai báo + luật viết: mục "Đa giọng" trong `references/project-schema.md` và mục ⑦ ở `vo-writing-craft.md`.
 
+### 🚦 GATE 1A · Story lock — DUYỆT KỊCH BẢN trước khi dựng storyboard (CHẶN CỨNG)
+
+**Kịch bản ràng buộc mọi bước sau (anchor/prompt/gen clip/ráp) → chốt HƯỚNG ở tầng lời rẻ nhất, TRƯỚC
+khi đổ công vào field/compile.** Chạy **Cây phản biện kịch bản** trong `references/decision-grilling.md`:
+tự soi 5 trục ở góc *tìm lỗi*, nêu 1-2 điểm yếu chưa chắc, rồi trình user bản **lời VO đọc-to** (chỉ
+`kichban.md`, CHƯA kèm storyboard/prompt):
+☐ **through-line** 1 câu, `turn`+`payoff` cùng trục ☐ có **≥1 open loop** cấy sớm–đóng payoff
+☐ mạch không cảnh thừa / không gãy ☐ **hook** không dạo đầu, gợi tò mò 3s(short)/30s(long)
+☐ **đọc to** 3 cảnh liền: không vấp, không đều nhịp, không tính từ cảm xúc tổng kết.
+User gật → set `gates.story_lock = true`. **Chưa gật thì KHÔNG dựng storyboard (không sang Bước 3).**
+Đổi hướng ở đây một câu; đổi sau khi compile phải chạy lại cả stage.
+
 ## Bước 3 · Storyboard máy-đọc-được (điền FIELD → compiler ghép prompt)
+
+> **Điều kiện vào:** chỉ chạy khi `gates.story_lock = true`. Chưa duyệt kịch bản → quay lại GATE 1A.
 
 Tạo `projects/<tên>/project.json` theo schema — **đọc `references/project-schema.md`
 trước khi viết file này** (quy tắc field, độ dài VO khớp duration, cách tách cảnh, cơ chế compiler).
@@ -103,9 +117,12 @@ Muốn viết prompt tay 1 cảnh → set `prompt_override: true` rồi ghi `pro
 Cảnh báo "THIẾU LIỆU" = cảnh chưa có `action` lẫn `prompt` → bổ sung. Công thức 5 khối + vựng từ
 điện ảnh + continuity: `../vidgen-clips/references/veo-prompt-craft.md`.
 
-## Bước 4 · Tự-QC rồi trình GATE 1 (script lock)
+## Bước 4 · Tự-QC rồi trình 🚦 GATE 1B (script lock — storyboard/prompt)
 
-Tự kiểm trước khi trình user (gate 1 — đã nhồi craft). **Chạy `compile-prompts` xong mới QC prompt:**
+> Kịch bản đã qua GATE 1A; gate này duyệt **KỸ THUẬT** (field/prompt/cỡ cảnh/continuity), không bàn
+> lại hướng. Nếu QC phát hiện phải đổi HƯỚNG kịch bản → quay lại Bước 2 + mở lại `story_lock=false`.
+
+Tự kiểm trước khi trình user (GATE 1B — đã nhồi craft). **Chạy `compile-prompts` xong mới QC prompt:**
 ☐ **hook** rõ trong 3s (short) / 30s (long), có open loop ☐ cấu trúc mạch rõ (3 hồi / kishōtenketsu)
 ☐ mỗi cảnh 1 ý, VO khớp ~duration ☐ prompt (đã compile) đủ 5 khối, style lặp nguyên văn, không cảnh "THIẾU LIỆU"
 ☐ đặc điểm nhân vật nhắc lại trong prompt ☐ **đa dạng cỡ cảnh** (shot_size không đơn điệu)
@@ -116,11 +133,13 @@ Tự kiểm trước khi trình user (gate 1 — đã nhồi craft). **Chạy `c
 ☐ không tính từ cảm xúc tổng kết thay được bằng chi tiết ☐ có ≥1 cảnh lặng chủ động sau beat nặng
 ☐ through-line 1 câu, turn+payoff cùng trục ☐ (nếu có thoại) cảnh thoại lệch khỏi close-up chính diện,
 mỗi nhân vật có `voice_id`, `vo` trống ở cảnh `dialogue[]`.
-Trình user duyệt kịch bản + storyboard. User gật → set `gates.script_lock = true`. **Chưa gật thì KHÔNG gen gì cả.**
+Trình user duyệt storyboard. User gật → set `gates.script_lock = true`. **Chưa gật thì KHÔNG gen gì cả.**
 
 ## Chạy lại / sửa
 
-Đã có `project.json` mà user muốn sửa → chỉ sửa **field craft** cảnh liên quan rồi chạy lại
+Đã có `project.json` mà user muốn sửa → phân biệt **sửa HƯỚNG** (through-line/mạch/lời VO) vs **sửa
+KỸ THUẬT** (field/prompt). Sửa hướng → set lại `gates.story_lock=false`, quay về Bước 2, duyệt lại GATE
+1A rồi mới compile. Sửa kỹ thuật → chỉ sửa **field craft** cảnh liên quan rồi chạy lại
 `compile-prompts` (idempotent, ghi đè prompt cảnh không `prompt_override`). Cảnh đã có clip `done`
 mà đổi field/`vo` thì reset `image.approved=false`, `clip.status="pending"` để stage sau gen lại đúng chỗ.
 Dự án Mức 3 cũ (prompt viết tay, chưa có field) vẫn chạy y nguyên — compiler giữ prompt cũ, không xoá.

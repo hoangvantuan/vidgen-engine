@@ -5,8 +5,9 @@ description: ORCHESTRATOR sản xuất video AI từ Ý TƯỞNG tới FILE .MP4
 
 # Vidgen Flow (orchestrator: ý tưởng → video production)
 
-**Thực thi:** main session tự lái, KHÔNG agent team. Đi tuần tự 4 stage, dừng ở 3 GATE
-chờ user duyệt. Song song thật sự (batch gen) nằm trong script Python của stage 3.
+**Thực thi:** main session tự lái, KHÔNG agent team. Đi tuần tự 4 stage, dừng ở **4 GATE**
+chờ user duyệt (stage 1 có 2 gate: kịch bản rồi storyboard). Song song thật sự (batch gen)
+nằm trong script Python của stage 3.
 
 **Triết lý gate — đặt cổng ở chỗ sửa sai ĐẮT nhất:** chữ rẻ → ảnh miễn phí → video tốn
 credit → ráp tốn công. Chốt từng lớp trước khi trả tiền cho lớp sau.
@@ -19,7 +20,7 @@ user (loại video, giọng đọc…) đều theo cùng lối grilling: **từn
 suy chỗ đã rõ**.
 
 ```
-Ý tưởng ─▶ STEP 1 vidgen-script ──🚦GATE 1 script lock
+Ý tưởng ─▶ STEP 1 vidgen-script ──🚦GATE 1A story lock (kịch bản) ──🚦GATE 1B script lock (storyboard)
                  ─▶ STEP 2 vidgen-character (anchor + clip thử) ──🚦GATE 2 character lock
                  ─▶ STEP 3 vidgen-clips (batch, tự chạy) 
                  ─▶ STEP 4 vidgen-assemble ──🚦GATE 3 final review ─▶ 06_final/final.mp4
@@ -36,14 +37,22 @@ suy chỗ đã rõ**.
 3. Kiểm nhanh môi trường khi sắp tới stage cần: Chrome + extension (stage 3),
    `ELEVENLABS_API_KEY` (stage 4 có lời đọc), `ffmpeg` (stage 4).
 
-## STEP 1 · Kịch bản — skill `vidgen-script`
+## STEP 1 · Kịch bản — skill `vidgen-script` (2 GATE, LUÔN tách)
 
 Tư vấn LOẠI video phù hợp trước (bảng gợi ý trong vidgen-script) → **thiết kế hook mở đầu** →
-brief 5 câu → kịch bản → `project.json` (schema + references craft trong vidgen-script/).
-**🚦 GATE 1:** trình kịch bản + storyboard (kiểm hook 3s/30s, cấu trúc kể, đa dạng cỡ cảnh, 1 CTA).
-User gật → `gates.script_lock=true`.
+brief 5 câu → viết kịch bản (lời VO) → **🚦 GATE 1A** → dựng storyboard → **🚦 GATE 1B**. Mọi video
+đều tách 2 gate, kể cả reel ngắn — kịch bản duyệt riêng trước, đắt sửa sau.
+
+**🚦 GATE 1A · story lock** (kịch bản — CHẶN dựng storyboard): trình bản **lời VO đọc-to** (chưa kèm
+prompt). Phản biện **cả mạch truyện** không chỉ hook — through-line (`turn`+`payoff` cùng trục?),
+open loop (cấy-đóng?), mạch (cảnh thừa/gãy?), lời (đọc-to vấp không?). User gật → `gates.story_lock=true`.
+**Chưa gật → KHÔNG dựng storyboard** (không compile prompt).
+
+**🚦 GATE 1B · script lock** (storyboard/prompt): sau khi compile — trình field/prompt (kiểm cỡ cảnh
+đa dạng, continuity, không "THIẾU LIỆU", 1 CTA). User gật → `gates.script_lock=true`.
 Chưa gật → KHÔNG đụng tới gen. Video không nhân vật cố định (phong cảnh, b-roll) →
-sau gate 1 bỏ qua STEP 2, mở luôn `character_lock` và ghi chú lý do.
+sau GATE 1B bỏ qua STEP 2, mở luôn `character_lock` và ghi chú lý do.
+Backward-compat: dự án cũ thiếu `story_lock` → coi như đã mở, chạy y nguyên.
 
 ## STEP 2 · Nhân vật — skill `vidgen-character`
 
@@ -85,7 +94,7 @@ Chi tiết: `vidgen-assemble` Bước 2b. → `gates.final_approved=true` → b�
 ## Test scenario
 
 **Luồng chuẩn:** "làm video kể chuyện con cáo và chùm nho, 9:16, ~1 phút" → STEP 0 tạo
-`projects/con-cao-va-chum-nho/` → STEP 1 brief+kịch bản 6-8 cảnh 🚦 → STEP 2 anchor cáo
+`projects/con-cao-va-chum-nho/` → STEP 1 brief+kịch bản 6-8 cảnh 🚦(1A lời)🚦(1B storyboard) → STEP 2 anchor cáo
 + clip thử 🚦 → STEP 3 gen 6-8 ảnh → duyệt → 6-8 clip → STEP 4 TTS+ráp 🚦 → final.mp4.
 
 **Luồng lỗi:** STEP 3 cảnh 4 gen failed 2 lần (prompt bị chặn) → manifest ghi `failed`,

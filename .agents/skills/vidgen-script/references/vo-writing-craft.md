@@ -178,7 +178,7 @@ cảnh 10 (cắt sang mặt bé lắng nghe, bà cụ ngoài khung):
 ## Map vào stage / QC
 
 - **Stage 1 (vidgen-script), Bước 2** — áp khi viết `kichban.md` và điền `scenes[].vo` / `dialogue[]`.
-- Bổ sung checklist tự-QC GATE 1 (ngoài các mục cấu trúc ở `hook-and-structure.md`):
+- Bổ sung checklist tự-QC **GATE 1A** (story lock — craft LỜI; ngoài các mục cấu trúc ở `hook-and-structure.md`):
   ☐ câu VO đầu không phải dạo đầu (niên đại/tên/chào) ☐ có ≥1 open loop cấy sớm, đóng ở payoff
   ☐ đọc to 3 cảnh liền không đều nhịp (có câu cụt để đấm) ☐ không tính từ cảm xúc tổng kết thay được
   bằng chi tiết ☐ có ≥1 cảnh lặng chủ động sau beat nặng ☐ through-line 1 câu, turn+payoff cùng trục

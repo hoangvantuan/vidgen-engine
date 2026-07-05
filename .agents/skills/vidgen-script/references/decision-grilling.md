@@ -1,7 +1,8 @@
 # Decision Grilling — phỏng vấn quyết định trước khi đốt credit
 
 **Dùng chung** cho mọi điểm "hỏi user / chốt quyết định" trong bộ vidgen (brief ở
-vidgen-script, chọn voice ở vidgen-assemble, phản biện 3 GATE ở vidgen-flow). Nguồn tư
+vidgen-script, chọn voice ở vidgen-assemble, phản biện 4 GATE ở vidgen-flow: 1A kịch bản / 1B storyboard
+/ 2 nhân vật / 3 bản cuối). Nguồn tư
 tưởng: skill `grilling`. Đây là **phương pháp**, không có số liệu cần verify — đừng bịa
 benchmark, đừng hứa retention.
 
@@ -53,6 +54,33 @@ Chốt theo đúng thứ tự này; câu sau kế thừa câu trước:
 Xong 5 nhánh mới sang **hook** và storyboard. Nhánh nào user đã chốt trong yêu cầu ban đầu →
 bỏ qua, chỉ liệt kê lại 1 dòng "mình hiểu là …" để user kịp bắt lỗi.
 
+## Cây PHẢN BIỆN KỊCH BẢN (vidgen-script GATE 1A — story_lock)
+
+**Vì sao có mục riêng:** brief grill *quyết định* (mục tiêu/persona/loại), nhưng **kịch bản đã VIẾT ra**
+(mạch + lời) là thứ ràng buộc mọi bước sau — anchor, prompt, gen clip (tốn credit), ráp. Nó phải được
+**duyệt RIÊNG, TRƯỚC khi dựng storyboard** (Bước 3): đổi hướng ở tầng lời rẻ, đổi sau khi đã compile
+prompt thì mất công. Đây KHÔNG phải grill hook đơn lẻ — grill **cả mạch truyện**.
+
+**Cách chạy:** sau khi viết `kichban.md` (Bước 2), tự soi ở góc *tìm lỗi* theo 5 trục dưới, nêu **1-2
+điểm yếu mình chưa chắc** rồi trình user bản **lời VO đọc-to** (chưa kèm storyboard/prompt). Từng câu,
+kèm đề xuất sửa — không hỏi "kịch bản ổn chưa?".
+
+1. **Through-line** (trục gốc — soi trước). "Sau video, người xem mang về MỘT điều gì?" `turn` và
+   `payoff` có **cùng trục** đó không, hay `payoff` tuột sang thông điệp thứ hai? *Đảo ngược:* hai
+   thông điệp cạnh nhau → kết loãng, không đọng.
+2. **Open loop.** Có **≥1 vòng mở** cấy ở 1/4 đầu, đóng ở payoff không? Kể tuyến tính không có lực
+   kéo. *Đảo ngược:* không gieo gì sớm → người xem không có lý do đợi câu sau, rớt giữa chừng.
+3. **Mạch — cảnh thừa / gãy.** Bỏ từng cảnh đi: cảnh nào bỏ mà mạch KHÔNG sụp = cảnh thừa (cắt cho
+   gọn credit). Chỗ nào nhảy cảm xúc/logic mà thiếu cầu nối = mạch gãy. *Đảo ngược:* nhồi cảnh cho
+   đủ thời lượng → loãng, đốt credit vô ích.
+4. **Hook thực thi.** Câu VO đầu có phải **dạo đầu** (niên đại/tên/chào) không? `first_frame` có gợi
+   tò mò trong 3s (short) / 30s (long) không? (chi tiết `vo-writing-craft.md §1`).
+5. **Lời đọc-to.** Đọc to 3 cảnh liền: có vấp, có đều nhịp như metronome, có tính từ cảm xúc tổng kết
+   thay được bằng chi tiết không? (`vo-writing-craft.md §3-4`). Nghe như văn viết → sửa.
+
+Chốt xong → user gật → `gates.story_lock = true` → **mới** sang Bước 3 (dựng field + compile). Chưa gật
+thì KHÔNG dựng storyboard. Sửa hướng ở đây một câu; sửa sau khi compile phải chạy lại cả stage.
+
 ## Cây quyết định CHỌN VOICE (vidgen-assemble Bước 1)
 
 Đừng liệt kê 100 voice bắt user tự mò. Suy từ persona + mood đã chốt ở brief, đề xuất
@@ -72,8 +100,11 @@ hoài nghi** (nguyên lý đảo ngược): "output này SAI kiểu gì mà mìn
 checklist tự-QC của từng gate ở góc nhìn *tìm lỗi*, không phải *xác nhận đúng*. Khi trình
 user, nêu **1-2 rủi ro còn lại mình chưa chắc** kèm hỏi thẳng, thay vì "ổn rồi, duyệt nhé":
 
-- GATE 1 (script): "Hook này thật sự dừng ngón tay ở giây 3 chứ? Nếu người xem là <persona>
-  mà mở bằng <first_frame>, họ lướt tiếp không?"
+- GATE 1A (kịch bản): chạy **Cây phản biện kịch bản** ở trên — soi through-line/open-loop/mạch/hook/
+  lời đọc-to. "Hook thật sự dừng ngón tay giây 3 chứ? `turn` và `payoff` có cùng một trục không, hay
+  kết đang tuột sang thông điệp khác?" Trình bản lời đọc-to, chưa kèm storyboard.
+- GATE 1B (storyboard): "Prompt đã compile có cảnh nào 'THIẾU LIỆU', cỡ cảnh có đơn điệu, continuity
+  (`screen_direction`/`location`) có nhất quán mạch không?" — duyệt KỸ THUẬT sau khi hướng đã chốt ở 1A.
 - GATE 2 (character): "Frame nào của clip thử nhân vật LỆCH anchor nhất — chấp nhận được không?"
 - GATE 3 (final): AI **không nghe audio, không xem chuyển động** → hỏi thẳng user 2 điều đó
   ("nhạc có đè giọng chỗ nào không? chuyển cảnh 4→5 có giật không?"), đừng tự kết luận "mượt rồi".
