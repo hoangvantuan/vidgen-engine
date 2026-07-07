@@ -136,6 +136,19 @@ def pitch_map(m):
     return d
 
 
+def reverb_map(m):
+    """Tập voice_id cần thêm VANG (reverb) — từ characters[].reverb (bool/số).
+    Dùng để giọng cần độ vang không gian (vd một bậc thầy/thần thoại) tách khỏi narrator khô.
+    Vang là hiệu ứng KHÔNG mặc định — chỉ giọng khai báo mới có (default trung tính, khô)."""
+    d = {}
+    for c in m.get("characters", []):
+        vid = (c.get("voice_id") or "").strip()
+        r = c.get("reverb")
+        if vid and r:
+            d[vid] = True
+    return d
+
+
 def scene_segments(scene, vmap, narrator, missing):
     """Trả danh sách (voice_id, text) cho 1 cảnh theo mô hình P1.
     - Có dialogue[] → mỗi lượt là 1 segment với giọng nhân vật (thiếu voice_id → fallback narrator).
@@ -187,6 +200,7 @@ def generate_per_scene(a, m, pdir, aspect, ec, vs):
     narrator = a.voice
     vmap = voice_map(m)
     pmap = pitch_map(m)   # voice_id → semitone (vd giọng trẻ +2; narrator giữ 0)
+    rmap = reverb_map(m)  # voice_id → cần vang (vd giọng bậc thầy) — narrator khô
     missing = set()
 
     w, h = RES.get(aspect, RES["portrait"])
@@ -215,6 +229,23 @@ def generate_per_scene(a, m, pdir, aspect, ec, vs):
     for s in m["scenes"]:
         segs = scene_segments(s, vmap, narrator, missing)
         if not segs:
+            # cảnh câm (no vo/dialogue): chèn khoảng lặng đúng scene.duration để CHIẾM CHỖ timeline
+            # → narration khớp độ dài video, cảnh sau không lệch tiếng; timings có mặt cảnh này nên
+            # assemble không tính nhầm target (ranh giới tts↔assemble: mọi cảnh phải có trong timeline).
+            sdur = float(s.get("duration", 0) or 0)
+            if sdur <= 0:
+                continue
+            ssil = work / f"silent{int(s['id']):02d}.wav"
+            subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi",
+                            "-i", "anullsrc=r=44100:cl=mono", "-t", f"{sdur:.3f}", str(ssil)],
+                           check=True)
+            scene_start = offset
+            concat_list.append(ssil)
+            offset += sdur
+            concat_list.append(sil)          # gap đuôi như cảnh nói, giữ nhịp đồng nhất
+            offset += a.gap
+            timings.append({"id": s["id"], "start": round(scene_start, 3),
+                            "end": round(scene_start + sdur, 3)})
             continue
         scene_start = offset
         for voice, txt in segs:
@@ -225,9 +256,14 @@ def generate_per_scene(a, m, pdir, aspect, ec, vs):
             # pitch THEO GIỌNG: giọng nhân vật (characters[].voice_pitch); narrator dùng --pitch (mặc định 0)
             sem = pmap.get(voice, a.pitch if voice == narrator else 0.0)
             conv = ["ffmpeg", "-y", "-v", "error", "-i", str(raw), "-ar", "44100", "-ac", "1"]
+            fx = []
             af = pitch_af(sem)
             if af:
-                conv += ["-af", af]
+                fx.append(af)
+            if rmap.get(voice):   # VANG cho giọng khai báo reverb. Đuôi echo kéo dài chút, nhưng
+                fx.append("aecho=0.8:0.85:55:0.28,highpass=f=80")  # probe_dur đo SAU filter → timings vẫn khớp
+            if fx:
+                conv += ["-af", ",".join(fx)]
             conv.append(str(wav))
             subprocess.run(conv, check=True)
             d = probe_dur(wav)
