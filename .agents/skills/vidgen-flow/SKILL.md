@@ -20,9 +20,11 @@ user (loại video, giọng đọc…) đều theo cùng lối grilling: **từn
 suy chỗ đã rõ**.
 
 ```
-Ý tưởng ─▶ STEP 1 vidgen-script ──🚦GATE 1A story lock (kịch bản) ──🚦GATE 1B script lock (storyboard)
-                 ─▶ STEP 2 vidgen-character (anchor + clip thử) ──🚦GATE 2 character lock
-                 ─▶ STEP 3 vidgen-clips (batch, tự chạy) 
+Ý tưởng ─▶ STEP 1 vidgen-script ──🚦GATE 1A story lock (kịch bản)
+                 ──🚦GATE 1A2 element lock (bảng element — nhân vật/prop/location tách từ kịch bản)
+                 ──🚦GATE 1B script lock (storyboard SHOT-FIRST: shot = đơn vị sản xuất)
+                 ─▶ STEP 2 vidgen-character (anchor MỌI element + clip thử) ──🚦GATE 2 character lock
+                 ─▶ STEP 3 vidgen-clips (gen per shot: master→derive, stitch về cảnh; vòng qc-clips)
                  ─▶ STEP 4 vidgen-assemble ──🚦GATE 3 final review ─▶ 06_final/final.mp4
 ```
 
@@ -37,24 +39,30 @@ suy chỗ đã rõ**.
 3. Kiểm nhanh môi trường khi sắp tới stage cần: Chrome + extension (stage 3),
    `ELEVENLABS_API_KEY` (stage 4 có lời đọc), `ffmpeg` (stage 4).
 
-## STEP 1 · Kịch bản — skill `vidgen-script` (2 GATE, LUÔN tách)
+## STEP 1 · Kịch bản — skill `vidgen-script` (3 GATE, LUÔN tách)
 
 Tư vấn LOẠI video phù hợp trước (bảng gợi ý trong vidgen-script) → **thiết kế hook mở đầu** →
-brief 5 câu → viết kịch bản (lời VO) → **🚦 GATE 1A** → dựng storyboard → **🚦 GATE 1B**. Mọi video
-đều tách 2 gate, kể cả reel ngắn — kịch bản duyệt riêng trước, đắt sửa sau.
+brief 5 câu → viết kịch bản (lời VO) → **🚦 GATE 1A** → element pass → **🚦 GATE 1A2** →
+dựng storyboard shot-first → **🚦 GATE 1B**. Mọi video đều tách gate, kể cả reel ngắn —
+lớp rẻ duyệt trước lớp đắt.
 
-**🚦 GATE 1A · story lock** (kịch bản — CHẶN dựng storyboard): trình bản **lời VO đọc-to** (chưa kèm
+**🚦 GATE 1A · story lock** (kịch bản — CHẶN element pass): trình bản **lời VO đọc-to** (chưa kèm
 prompt). Phản biện **cả mạch truyện** không chỉ hook — through-line (`turn`+`payoff` cùng trục?),
 open loop (cấy-đóng?), mạch (cảnh thừa/gãy?), lời (đọc-to vấp không?). User gật → `gates.story_lock=true`.
-**Chưa gật → KHÔNG dựng storyboard** (không compile prompt).
+
+**🚦 GATE 1A2 · element lock** (bảng element — CHẶN dựng storyboard): tách MỌI thực thể từ kịch
+bản (nhân vật kể cả vai phụ / prop / location / ambience) → `01_script/elements.md` + registry
+trong manifest, mỗi element có cách khoá (anchor riêng · registry desc · bake vào location · né
+mặt). Nhìn toàn dàn MỘT LƯỢT trước khi rải vào cảnh. User gật → `gates.element_lock=true`.
 
 **🚦 GATE 1B · script lock** (storyboard/prompt): sau khi compile — chạy `flowgen qc-storyboard`
-(máy đo nhịp/góc/transition/continuity, warn-only) rồi trình field/prompt KÈM kết quả QC: mỗi ⚠
-hoặc đã sửa hoặc nêu lý do phá cách (kiểm cỡ cảnh + góc máy đa dạng, nhịp duration biến thiên,
-beat đắt có coverage `shots[]`, continuity, không "THIẾU LIỆU", 1 CTA). User gật → `gates.script_lock=true`.
+(máy đo nhịp/góc/transition/continuity/thực thể/state, warn-only) rồi trình field/prompt KÈM kết
+quả QC: mỗi ⚠ hoặc đã sửa hoặc nêu lý do phá cách (cỡ cảnh + góc đa dạng, nhịp biến thiên, beat
+đắt có shots[] separate + master, tổng duration shot khớp VO, không id lạ ngoài bảng element,
+không "THIẾU LIỆU", 1 CTA). User gật → `gates.script_lock=true`.
 Chưa gật → KHÔNG đụng tới gen. Video không nhân vật cố định (phong cảnh, b-roll) →
 sau GATE 1B bỏ qua STEP 2, mở luôn `character_lock` và ghi chú lý do.
-Backward-compat: dự án cũ thiếu `story_lock` → coi như đã mở, chạy y nguyên.
+Backward-compat: dự án cũ thiếu `story_lock`/`element_lock` → coi như đã mở, chạy y nguyên.
 
 ## STEP 2 · Nhân vật — skill `vidgen-character`
 

@@ -47,14 +47,21 @@ Manifest là NGUỒN SỰ THẬT duy nhất về trạng thái dự án. Script 
                                         // veo-prompt-craft.md mục 2b. Scale lệch-thực nhất quán → bake vào location anchor.
                                         // compiler nhét NGUYÊN VĂN vào [Style & Ambiance] mọi cảnh → đồng bộ.
 
-  "gates": {                            // 4 cổng human — orchestrator kiểm trước khi đi tiếp
-    "story_lock": false,                // GATE 1A: KỊCH BẢN (through-line/mạch/hook/lời VO) đã duyệt — CHẶN dựng storyboard
+  "gates": {                            // 5 cổng human — orchestrator kiểm trước khi đi tiếp
+    "story_lock": false,                // GATE 1A: KỊCH BẢN (through-line/mạch/hook/lời VO) đã duyệt — CHẶN element pass
+    "element_lock": false,              // GATE 1A2: BẢNG ELEMENT (mọi nhân vật/prop/location/ambience tách từ
+                                        //   kịch bản → characters[]/props[]/locations[] + 01_script/elements.md,
+                                        //   kèm cách khoá + tần suất) đã duyệt — CHẶN dựng storyboard. Storyboard
+                                        //   chỉ được TRỎ id từ bảng element; id lạ = lỗi cứng (QC nhóm THỰC THỂ).
+                                        //   Lý do gate riêng: danh sách element phải được nhìn TOÀN BỘ một lượt
+                                        //   TRƯỚC khi rải vào N cảnh (bệnh nhân-vật-mồ-côi sinh từ thiếu bảng kiểm này).
     "script_lock": false,               // GATE 1B: storyboard/prompt (field/cỡ cảnh/continuity) đã duyệt
     "character_lock": false,            // GATE 2: anchor + clip thử đã duyệt
     "final_approved": false             // GATE 3: bản ráp cuối đã duyệt
   },
-  // Backward-compat: dự án cũ THIẾU story_lock → orchestrator coi như đã mở (không chặn luồng cũ).
-  // Luật gen: story_lock=false → CẤM sang Bước 3 (dựng storyboard/compile). script_lock=false → CẤM gen.
+  // Backward-compat: dự án cũ THIẾU story_lock/element_lock → orchestrator coi như đã mở (không chặn luồng cũ).
+  // Luật gen: story_lock=false → CẤM element pass. element_lock=false → CẤM dựng storyboard/compile.
+  // script_lock=false → CẤM gen.
 
   "characters": [
     // LUẬT ĐỒNG BỘ (không phân biệt chính/phụ): MỌI nhân vật xuất hiện MẶT-RÕ (medium trở gần)
@@ -177,22 +184,39 @@ Manifest là NGUỒN SỰ THẬT duy nhất về trạng thái dự án. Script 
         { "char": "be_na", "line": "Con tìm thấy rồi!" }   // char trỏ characters[].id → dùng voice_id của nhân vật đó
       ],                                //   MÔ HÌNH P1: cảnh có dialogue[] thì KHÔNG dùng `vo` — mỗi cảnh 1 kiểu tiếng.
 
-      // ── Coverage (tùy chọn) — beat ĐẮT kể bằng NHIỀU cú trong CÙNG 1 lần gen ──
-      "shots": [                        // (tùy chọn) các cú máy cắt xen trong 1 generation (timestamp prompting
-                                        //   Veo 3.1, nguồn Google Cloud — 0 credit thêm). Compiler ghép thành
-                                        //   prompt "[00:00-00:03] ... [00:03-00:06] ...". Tổng `to` cuối PHẢI ≤
-                                        //   duration. Mỗi cú 2-4s. Dùng cho role hook/turn/payoff + cảnh thoại;
-                                        //   cảnh ngấm cần cú dài thì ĐỪNG dùng. Xem scene-grammar.md §6a-§7.
-        { "from": 0, "to": 3, "shot_size": "wide",  "camera_angle": "eye_level",
-          "action": "an old woman presses a sweet potato into the girl's hands" },
-        { "from": 3, "to": 6, "shot_size": "close", "camera_angle": "eye_level",
+      // ── SHOT — đơn vị sản xuất (workflow v2 shot-first). Scene = container ngữ nghĩa ──
+      // Cảnh KHÔNG có shots[] → 1 cú như cũ (backward-compat tuyệt đối, image/clip cấp scene).
+      // Có shots[] thì phân biệt 2 STYLE theo field (KHÔNG trộn 2 style trong 1 cảnh — QC bắt):
+      //
+      // STYLE 1 · SEPARATE (shot-first, MẶC ĐỊNH cho dự án mới): mỗi shot có `duration` riêng →
+      //   MỖI SHOT 1 GENERATION RIÊNG (ảnh khung đầu riêng, clip riêng, duyệt/regen độc lập).
+      //   Shot ĐẦU của cảnh ≥2 shot = MASTER (wide/establishing, thiết lập không gian + vị trí
+      //   mọi người) — gen & duyệt TRƯỚC; shot con derive: ref = frame master + anchor gốc
+      //   (danh tính LUÔN từ anchor — luật chống photocopy). Gen đủ shot → flowgen stitch-shots
+      //   tự ghép (trim theo duration, cắt cứng) ra 04_clips/sceneNN.mp4 ĐÚNG hợp đồng cũ —
+      //   assemble không đổi. Cảnh ngấm = 1 shot long-take duy nhất (đừng băm).
+      "shots": [
+        { "id": 1, "duration": 4, "shot_size": "wide", "camera_angle": "eye_level",
+          "action": "an old woman presses a sweet potato into the girl's hands",
+          "prompt": "",                 // DẪN XUẤT — compiler ghép per shot (cine của shot +
+                                        //   subject/context/style/state của SCENE); prompt_override như scene
+          "image": { "file": "03_images/scene05_s1.png", "media_id": "", "approved": false },
+          "clip":  { "file": "04_clips/scene05_s1.mp4", "media_id": "", "status": "pending" } },
+        { "id": 2, "duration": 3, "shot_size": "close",
           "action": "the girl's face, eyes widening, she looks up" },
-        { "from": 6, "to": 8, "shot_size": "extreme_close",
+        { "id": 3, "duration": 2, "shot_size": "extreme_close",
           "action": "insert: the sweet potato in her small hands, steam rising" }
-      ],                                //   Cảnh KHÔNG có shots[] → 1 cú như cũ (backward-compat). Khi có
-                                        //   shots[]: shot_size/camera_angle/action TOP-LEVEL bị bỏ qua ở khối
-                                        //   [Cinematography]/[Action] (mỗi cú tự khai), các field còn lại của
-                                        //   cảnh (emotion/lighting/style/subject/context/sfx) vẫn áp CHUNG.
+      ],                                //   Tổng duration các shot ≈ duration cảnh (khớp VO — QC đo).
+                                        //   duration gen Veo là 4/6/8/10 → shot ngắn hơn sẽ TRIM lấy đoạn ĐẦU
+                                        //   khi stitch (đỉnh chất lượng 4-6s đầu — mẹo cộng đồng nhất quán).
+      //
+      // STYLE 2 · TIMESTAMP (biến thể micro-cut TRONG 1 generation — 0 credit thêm, đã kiểm
+      //   chứng nội bộ 1 mẫu): mỗi cú có `from`/`to` (không duration/image riêng):
+      //   { "from": 0, "to": 3, "shot_size": "wide", "action": "..." } — compiler ghép chuỗi
+      //   "[00:00-00:03] ...". Tổng `to` ≤ duration cảnh, mỗi cú 2-4s. Dùng khi muốn nhiều cú
+      //   mà chấp nhận không regen lẻ từng cú; Veo không nghe lời mốc thì chuyển separate.
+      //   Khi có shots[] (style nào cũng vậy): shot_size/camera_angle/action TOP-LEVEL của scene
+      //   bị bỏ qua (mỗi cú tự khai); emotion/lighting/style/subject/context/sfx/state vẫn áp CHUNG.
 
       // ── Continuity giữa cảnh (tùy chọn) — nối liền mạch, chống nhảy setting/đảo hướng ──
       "screen_direction": "L2R",        // hướng chuyển động trên khung: L2R|R2L|toward|away|static (giữ nhất quán mạch)
@@ -331,12 +355,14 @@ field có cấu trúc để (a) QC tự động, (b) auto-fill từ tri thức �
 ## Ba đường gen theo số thực thể cần neo (đồng bộ toàn diện — chất lượng trước credit)
 
 Ngân sách reference của Veo/Flow là **3 ảnh/generation** (tài liệu Vertex AI còn ghi 3 ảnh vốn cho
-MỘT chủ thể; ref và first-frame loại trừ nhau trong 1 lần gen). Chọn đường theo cảnh:
+MỘT chủ thể; ref và first-frame loại trừ nhau trong 1 lần gen). Workflow v2: đơn vị gen là **SHOT**
+(cảnh 1 cú = 1 shot) — chọn đường cho TỪNG shot:
 
-| Cảnh | Đường gen | Cơ chế neo |
+| Shot | Đường gen | Cơ chế neo |
 |---|---|---|
 | Thường (≤2 nhân vật mặt rõ + location) | **i2v từ ảnh khung đầu ĐÃ DUYỆT** (mặc định pipeline) | ảnh gen với ≤3 anchor ref, người duyệt khung |
-| Coverage timestamp (shots[]) | **r2v + anchor** (đã kiểm chứng nội bộ cảnh 9) | ≤3 ref: nhân vật > prop hero > location |
+| Shot con trong cảnh ≥2 shot | **derive từ master**: ảnh khung đầu gen với ref = frame MASTER + anchor nhân vật | master truyền không gian/ánh sáng; danh tính từ anchor gốc |
+| Micro-cut timestamp (style 2) | **r2v + anchor** (đã kiểm chứng nội bộ cảnh 9) | ≤3 ref: nhân vật > prop hero > location |
 | Đông thực thể (>3 ứng viên neo) | **composite first-frame** (`flowgen compose-frame`) | ghép DẦN từng thực thể vào 1 khung bằng edit ảnh miễn phí (mỗi lượt ≤3 ref, tích lũy), duyệt khung, rồi i2v |
 
 - Thứ tự ưu tiên slot khi phải cắt: **nhân vật mặt rõ → ref_prev (frame cảnh trước) → hero-prop →

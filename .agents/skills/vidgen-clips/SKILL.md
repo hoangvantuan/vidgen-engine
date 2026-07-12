@@ -9,19 +9,28 @@ Kinh tế của stage này: **ảnh miễn phí, video tốn credit**. Vì vậy
 gen ảnh khung đầu → user duyệt ảnh (rẻ) → mới I2V (đắt, 1 lần/cảnh). Mọi tiến độ ghi vào
 `project.json` sau TỪNG cảnh — đứt giữa chừng chạy lại không mất gì, không gen trùng.
 
-**BA ĐƯỜNG GEN theo số thực thể cần neo** (ngân sách 3 ref/generation — bảng đầy đủ + luật ưu
-tiên slot: `project-schema.md` mục "Ba đường gen"):
-1. Cảnh thường (≤2 nhân vật mặt rõ + location) → **i2v từ ảnh đã duyệt** (Bước 1-2 dưới).
-2. Cảnh coverage `shots[]` → **r2v + anchor** (nhân vật > hero-prop > location; `ref_prev` thay
-   location anchor khi cắt đổi góc cùng không gian).
-3. Cảnh ĐÔNG (`composite: true`) → **compose-frame** ghép dần từng thực thể vào khung đầu
+**WORKFLOW V2 — SHOT là đơn vị sản xuất** (cảnh shot-first khai `shots[]` separate trong manifest):
+- **Master-first rồi derive:** `scene-images` gen ảnh khung đầu shot MASTER trước (anchor refs)
+  → NGƯỜI DUYỆT master (`image.approved=true` trên shot) → chạy lại: shot con gen với
+  **ref = frame master + anchor nhân vật** (không gian/ánh sáng từ master, danh tính từ anchor gốc).
+- `scene-clips` gen clip TỪNG shot (i2v từ ảnh shot đã duyệt; duration Veo lấy mức 4/6/8/10
+  nhỏ nhất đủ) → đủ shot thì TỰ **stitch** (trim theo `duration` lấy đoạn ĐẦU, cắt cứng nội cảnh)
+  ra `04_clips/sceneNN.mp4` đúng hợp đồng cũ — assemble không cần biết shot tồn tại.
+  Regen shot lẻ xong chạy `stitch-shots --project ... --scene N` để ghép lại.
+
+**ĐƯỜNG GEN per shot theo số thực thể cần neo** (ngân sách 3 ref/generation — bảng đầy đủ + luật
+ưu tiên slot: `project-schema.md` mục "Ba đường gen"):
+1. Shot thường (≤2 nhân vật mặt rõ + location) → **i2v từ ảnh đã duyệt** (Bước 1-2 dưới).
+2. Micro-cut timestamp (`shots[]` kiểu from/to) → **r2v + anchor** (nhân vật > hero-prop >
+   location; `ref_prev` thay location anchor khi cắt đổi góc cùng không gian).
+3. Cảnh/shot ĐÔNG (`composite: true`) → **compose-frame** ghép dần từng thực thể vào khung đầu
    (miễn phí, mỗi lượt ≤3 ref TÍCH LŨY) → duyệt khung → i2v như thường:
    ```bash
    $PY $GEN compose-frame --project projects/<tên> --scene 4   # 1 cảnh/lần, duyệt từng khung
    ```
    Khung cuối lệch → soi từng lượt `03_images/sceneNN_comp_K.png` tìm lượt hỏng, sửa rồi chạy lại.
-**LUẬT chất lượng: mọi khung đầu (kể cả composite, kể cả khung chain) phải NGƯỜI duyệt trước khi
-đốt credit.**
+**LUẬT chất lượng: mọi khung đầu (master, shot con, composite, khung chain) phải NGƯỜI duyệt
+trước khi đốt credit.**
 
 **Craft prompt (đọc trước khi gen/soi):** công thức prompt Veo 5 phần, vựng camera/cỡ cảnh, negative
 prompt tránh AI-tell, cách né chặn nội dung → `references/veo-prompt-craft.md`. Veo 3 còn **sinh

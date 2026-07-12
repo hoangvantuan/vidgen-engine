@@ -108,6 +108,10 @@ Không đạt → hạ cảnh đó về 1 cú hoặc chuyển đường master�
 **Dự án có cảnh composite (`composite:true`, cảnh đông thực thể):** clip thử PHẢI kèm 1 cảnh đi
 đường `compose-frame` → i2v — đường composite CHƯA kiểm chứng thật trên engine này; soi khung
 composite giữ đúng mặt TỪNG nhân vật (không trộn), rồi clip i2v có giữ tiếp không.
+**Dự án shot-first (workflow v2 — mặc định dự án mới):** clip thử PHẢI kèm 1 cảnh ≥2 shot đi trọn
+đường **master → derive → stitch** — kỹ thuật derive (ảnh shot con ref frame master) CHƯA kiểm
+chứng thật; soi: shot con giữ đúng không gian/ánh sáng master? mặt vẫn khớp anchor gốc? bản stitch
+cắt nội cảnh có mượt không?
 
 Gen thử cảnh rủi ro nhất có nhân vật:
 ```bash

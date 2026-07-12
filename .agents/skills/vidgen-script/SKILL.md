@@ -67,12 +67,39 @@ tự soi 5 trục ở góc *tìm lỗi*, nêu 1-2 điểm yếu chưa chắc, r�
 ☐ **through-line** 1 câu, `turn`+`payoff` cùng trục ☐ có **≥1 open loop** cấy sớm–đóng payoff
 ☐ mạch không cảnh thừa / không gãy ☐ **hook** không dạo đầu, gợi tò mò 3s(short)/30s(long)
 ☐ **đọc to** 3 cảnh liền: không vấp, không đều nhịp, không tính từ cảm xúc tổng kết.
-User gật → set `gates.story_lock = true`. **Chưa gật thì KHÔNG dựng storyboard (không sang Bước 3).**
+User gật → set `gates.story_lock = true`. **Chưa gật thì KHÔNG sang Bước 2b (element pass).**
 Đổi hướng ở đây một câu; đổi sau khi compile phải chạy lại cả stage.
 
-## Bước 3 · Storyboard máy-đọc-được (điền FIELD → compiler ghép prompt)
+## Bước 2b · ELEMENT PASS — tách bảng element từ kịch bản (workflow v2)
 
-> **Điều kiện vào:** chỉ chạy khi `gates.story_lock = true`. Chưa duyệt kịch bản → quay lại GATE 1A.
+> **Điều kiện vào:** `gates.story_lock = true`. Mục đích: nhìn TOÀN BỘ dàn element MỘT LƯỢT
+> trước khi rải vào N cảnh — bệnh nhân-vật-mồ-côi sinh từ chỗ thiếu bảng kiểm này.
+
+Đọc kịch bản đã duyệt, TÁCH mọi thực thể xuất hiện thành bảng, ghi 2 nơi:
+1. **`project.json`**: điền `characters[]` (MỌI nhân vật mặt-rõ/lặp ≥2 cảnh, kể cả vai phụ) +
+   `props[]` (đạo cụ lặp, hero-prop đánh dấu) + `locations[]` + `music.ambience`.
+2. **`01_script/elements.md`** (bản cho người duyệt): bảng
+   `| id | loại | desc | cách khoá | xuất hiện ở cảnh |` — cách khoá ∈ {anchor riêng · registry
+   desc · bake vào location anchor · né mặt (đám đông)}.
+
+### 🚦 GATE 1A2 · Element lock — DUYỆT BẢNG ELEMENT trước khi dựng storyboard (CHẶN CỨNG)
+
+Trình `elements.md`, tự soi trước: ☐ không sót ai/vật nào kịch bản nhắc tới ☐ mỗi element có
+cách khoá rõ ☐ prop gắn bối cảnh đã chuyển sang "bake vào location" ☐ đám đông có ghi chú né mặt.
+User gật → `gates.element_lock = true`. Storyboard (Bước 3) chỉ được TRỎ id từ bảng này —
+compile chặn khi gate chưa mở, QC bắt id lạ.
+
+## Bước 3 · Storyboard máy-đọc-được (SHOT-FIRST — điền FIELD → compiler ghép prompt per shot)
+
+> **Điều kiện vào:** `gates.story_lock = true` VÀ `gates.element_lock = true`.
+
+**Workflow v2 — SHOT là đơn vị sản xuất, SCENE là container ngữ nghĩa** (beat + location + state
++ VO): mỗi cảnh khai `shots[]` kiểu **separate** (mỗi shot có `duration` + `shot_size` + `action`
+riêng → gen/duyệt/regen ĐỘC LẬP từng shot; xem 2 style trong `project-schema.md`). Luật:
+- Cảnh 1 ý đơn giản / cảnh ngấm = **1 shot** (long-take 8-10s, đừng băm).
+- Cảnh ≥2 shot: shot ĐẦU là **MASTER** (wide/establishing thiết lập không gian) — shot con
+  (close/insert/reaction) derive từ master khi gen. Tổng duration shot ≈ duration cảnh (khớp VO).
+- VO/dialogue/state/transition vẫn ở cấp SCENE; cine + action ở cấp SHOT.
 
 Tạo `projects/<tên>/project.json` theo schema — **đọc `references/project-schema.md` VÀ
 `references/scene-grammar.md` trước khi viết file này** (schema: quy tắc field, VO khớp duration,
@@ -125,9 +152,10 @@ compiler ghép. Mỗi cảnh điền:
   nghĩa; fade đồng loạt = trôi đều slideshow (bài học đo được 67%).
 - `duration` **biến thiên theo beat** (bài học 15/15 cảnh đúng 8s = slideshow): căng/hành động 4-6s,
   ngấm cảm xúc/lặng 8-10s, leo thang cao trào NGẮN DẦN. VO viết khớp (~3-4 chữ/giây).
-- **Coverage cho beat ĐẮT (`shots[]`):** cảnh `role: hook/turn/payoff` và cảnh `dialogue[]` → cân
-  nhắc kể bằng 2-3 cú cắt xen TRONG CÙNG 1 lần gen (timestamp prompting, 0 credit thêm): điền
-  `shots[]` (mỗi cú: `from/to/shot_size/camera_angle/action`, 2-4s/cú, có ≥1 cú cận/insert/reaction).
+- **Coverage cho beat ĐẮT (`shots[]` separate):** cảnh `role: hook/turn/payoff` và cảnh
+  `dialogue[]` → kể bằng 2-3 shot riêng (master wide + cận/insert/reaction, mỗi shot
+  `duration/shot_size/action`); biến thể tiết kiệm: timestamp `from/to` trong 1 generation
+  (đã kiểm chứng 1 mẫu) khi chấp nhận không regen lẻ từng cú.
   Cảnh ngấm cần cú dài thì ĐỪNG dùng. Đi qua **bảng kích hoạt continuity** (`scene-grammar.md §7`)
   cho TỪNG cặp cảnh liền kề — giờ là BẮT BUỘC điền khi khớp bảng, không phải gợi ý (bài học 0/15
   dùng dù field có sẵn): liên tục thời-không → `link_prev`; **cắt đổi góc CÙNG không gian (mode

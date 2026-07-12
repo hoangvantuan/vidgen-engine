@@ -99,6 +99,57 @@ def patch_scene(project_dir: Path, scene_id, key: str, value):
     save_manifest(project_dir, m)
 
 
+def patch_shot(project_dir: Path, scene_id, shot_id, key: str, value):
+    """Như patch_scene nhưng cho 1 SHOT (workflow v2): chỉ set scenes[sid].shots[shid][key]
+    — sửa tay field khác của shot/cảnh giữa batch không bị đè im lặng."""
+    m = load_manifest(project_dir)
+    for sc in m.get("scenes", []):
+        if sc.get("id") == scene_id:
+            for sh in sc.get("shots", []):
+                if sh.get("id") == shot_id:
+                    sh[key] = value
+                    break
+            break
+    save_manifest(project_dir, m)
+
+
+def _gen_duration(want) -> int:
+    """Veo chỉ nhận 4/6/8/10 — chọn mức NHỎ NHẤT ≥ duration shot muốn (thừa sẽ trim khi stitch,
+    lấy đoạn ĐẦU — đỉnh chất lượng generation)."""
+    w = float(want or 8)
+    return next((d for d in (4, 6, 8, 10) if d >= w), 10)
+
+
+def stitch_shots(pdir: Path, s: dict) -> str | None:
+    """SHOT-FIRST: ghép các shot clip của 1 cảnh (trim theo shot.duration, CẮT CỨNG nội cảnh)
+    → 04_clips/sceneNN.mp4 ĐÚNG hợp đồng cũ — assemble không cần biết shot tồn tại.
+    Trả path hoặc None (thiếu shot chưa done)."""
+    import subprocess
+    shots = s.get("shots") or []
+    parts = []
+    for sh in shots:
+        cf = (sh.get("clip") or {}).get("file") or f"04_clips/scene{s['id']:02d}_s{sh.get('id')}.mp4"
+        p = pdir / cf
+        if (sh.get("clip") or {}).get("status") != "done" or not p.exists():
+            return None
+        parts.append((p, float(sh.get("duration") or 0)))
+    out = pdir / "04_clips" / f"scene{s['id']:02d}.mp4"
+    inputs, filters = [], []
+    for i, (p, dur) in enumerate(parts):
+        inputs += ["-i", str(p)]
+        trim = f"trim=duration={dur}," if dur > 0 else ""
+        filters.append(f"[{i}:v]{trim}setpts=PTS-STARTPTS[v{i}]")
+    concat_in = "".join(f"[v{i}]" for i in range(len(parts)))
+    graph = ";".join(filters) + f";{concat_in}concat=n={len(parts)}:v=1:a=0[out]"
+    cmd = ["ffmpeg", "-y", *inputs, "-filter_complex", graph, "-map", "[out]",
+           "-an", "-c:v", "libx264", "-crf", "18", "-preset", "medium", str(out)]
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    if r.returncode != 0:
+        print(f"  ✗ stitch cảnh {s['id']} lỗi ffmpeg: {r.stderr[-300:]}")
+        return None
+    return str(out.relative_to(pdir))
+
+
 def _pick_anchor(anchors: list, angle: str):
     """Chọn anchor đúng angle (có media_id), fallback anchor đầu có media_id."""
     return next((a for a in anchors if a.get("angle") == angle and a.get("media_id")),
@@ -295,12 +346,35 @@ def _compile_shots_block(s: dict) -> tuple[str | None, str]:
     return ". ".join(parts), ("; ".join(warns) if warns else "")
 
 
+def shot_style(s: dict) -> str:
+    """Phân loại shots[]: '' (không có — 1 cú như cũ) | 'timestamp' (from/to — micro-cut
+    trong 1 generation) | 'separate' (duration — SHOT-FIRST: mỗi shot 1 generation riêng)."""
+    shots = s.get("shots") or []
+    if not shots:
+        return ""
+    return "separate" if any("duration" in sh for sh in shots) else "timestamp"
+
+
+def compile_shot_prompt(m: dict, s: dict, sh: dict) -> tuple[str | None, str]:
+    """SHOT-FIRST: prompt riêng cho 1 shot — cine/action từ SHOT, subject/context/style/state
+    từ SCENE (container ngữ nghĩa). Tái dùng compile_scene_prompt qua scene giả lập để 2 đường
+    tả MỘT KIỂU (không nhân đôi logic)."""
+    pseudo = {k: v for k, v in s.items() if k != "shots"}
+    for k in ("shot_size", "camera_angle", "camera_move", "action", "lens", "prompt"):
+        pseudo[k] = sh.get(k, "")   # cine/action của SHOT (scene-level bị bỏ qua khi có shots[])
+    pseudo["prompt_override"] = bool(sh.get("prompt_override"))
+    return compile_scene_prompt(m, pseudo)
+
+
 def compile_scene_prompt(m: dict, s: dict) -> tuple[str | None, str]:
     """Ghép prompt Veo từ field craft. Trả (prompt|None, note).
-    None = bỏ qua (override / thiếu liệu). Idempotent, emotion auto-fill field trống.
-    Cảnh có shots[] → coverage: chuỗi timestamp thay [Cinematography]+[Action]."""
+    None = bỏ qua (override / thiếu liệu / shot-first). Idempotent, emotion auto-fill field trống.
+    shots[] timestamp → chuỗi mốc thay [Cinematography]+[Action]; shots[] separate → cmd compile
+    per shot (compile_shot_prompt), prompt cấp scene không dùng."""
     if s.get("prompt_override"):
         return None, "giữ nguyên (prompt_override — prompt viết tay)"
+    if shot_style(s) == "separate":
+        return None, "__separate__"
     shots = s.get("shots") or []
     action = (s.get("action") or "").strip()
     if not action and not shots:
@@ -406,9 +480,26 @@ def compile_scene_prompt(m: dict, s: dict) -> tuple[str | None, str]:
 async def cmd_compile_prompts(a):  # async để khớp dispatch asyncio.run; thân thuần local, không await
     pdir = Path(a.project)
     m = load_manifest(pdir)
+    # element_lock=false TƯỜNG MINH (dự án v2) → storyboard chưa được duyệt bảng element.
+    # Dự án cũ thiếu key → coi như mở (backward-compat).
+    if m.get("gates", {}).get("element_lock") is False and not a.dry_run:
+        raise SystemExit("GATE 1A2 (element_lock) chưa mở — duyệt bảng element "
+                         "(01_script/elements.md) trước khi compile. Xem trước: --dry-run.")
     changed, skipped, warned = [], [], []
     for s in m.get("scenes", []):
         if a.scene and s["id"] not in a.scene:
+            continue
+        # SHOT-FIRST: compile per shot, prompt cấp scene không dùng
+        if shot_style(s) == "separate":
+            for sh in s["shots"]:
+                p_sh, n_sh = compile_shot_prompt(m, s, sh)
+                sid_lbl = f"{s['id']}.s{sh.get('id', '?')}"
+                if p_sh is None:
+                    (warned if n_sh.startswith("THIẾU") else skipped).append((sid_lbl, n_sh))
+                    continue
+                sh["prompt"] = p_sh
+                changed.append((sid_lbl, n_sh))
+                print(f"— Shot {sid_lbl}: {n_sh}\n    {p_sh}")
             continue
         prompt, note = compile_scene_prompt(m, s)
         if prompt is None:
@@ -536,17 +627,42 @@ async def cmd_qc_storyboard(a):  # async khớp dispatch; thân thuần local
                                   "shots[] — cân nhắc coverage 2-3 cú (scene-grammar §6a)."))
         prev = s
 
-    # E · shots[] hợp lệ + VO khớp nhịp đọc (~3-4 chữ/giây)
+    # E · shots[] hợp lệ (2 style) + VO khớp nhịp đọc (~3-4 chữ/giây)
     for s in scenes:
-        for i, sh in enumerate(s.get("shots") or [], 1):
-            f, t = sh.get("from", 0), sh.get("to", 0)
-            if t <= f:
-                W.append(("SHOTS", f"cảnh {s['id']} shots[{i}]: from/to không tăng ({f}→{t})."))
-            elif not (1.5 <= t - f <= 4.5):
-                I.append(("SHOTS", f"cảnh {s['id']} shots[{i}]: cú {t - f}s — nên 2-4s/cú."))
-        last = (s.get("shots") or [{}])[-1].get("to")
-        if last and last > s.get("duration", 8):
-            W.append(("SHOTS", f"cảnh {s['id']}: shots kết ở {last}s > duration {s.get('duration', 8)}s."))
+        style = shot_style(s)
+        shots = s.get("shots") or []
+        if style == "separate":
+            # SHOT-FIRST: mỗi shot 1 generation — luật master + duration khớp cảnh
+            if any("from" in sh or "to" in sh for sh in shots):
+                W.append(("SHOTS", f"cảnh {s['id']}: TRỘN style (vừa duration vừa from/to) — "
+                                   "chọn 1: separate (duration) hoặc timestamp (from/to)."))
+            if len(shots) >= 2:
+                first_sz = (shots[0].get("shot_size") or "").strip()
+                if first_sz not in ("wide", "establishing"):
+                    W.append(("SHOTS", f"cảnh {s['id']}: shot đầu '{first_sz or '?'}' không phải "
+                                       "wide/establishing — cảnh ≥2 shot cần MASTER thiết lập "
+                                       "không gian (shot con derive từ nó)."))
+            for sh in shots:
+                if not (sh.get("action") or "").strip():
+                    W.append(("SHOTS", f"cảnh {s['id']} shot {sh.get('id', '?')}: thiếu 'action'."))
+                d = float(sh.get("duration") or 0)
+                if d and not (1.5 <= d <= 10):
+                    I.append(("SHOTS", f"cảnh {s['id']} shot {sh.get('id', '?')}: {d}s — "
+                                       "shot thường 2-8s (long-take tối đa 10s)."))
+            total = sum(float(sh.get("duration") or 0) for sh in shots)
+            if s.get("duration") and abs(total - float(s["duration"])) > 2:
+                W.append(("SHOTS", f"cảnh {s['id']}: tổng shot {total:g}s lệch duration cảnh "
+                                   f"{s['duration']}s >2s — VO sẽ bị kéo/nén khi ráp."))
+        elif style == "timestamp":
+            for i, sh in enumerate(shots, 1):
+                f, t = sh.get("from", 0), sh.get("to", 0)
+                if t <= f:
+                    W.append(("SHOTS", f"cảnh {s['id']} shots[{i}]: from/to không tăng ({f}→{t})."))
+                elif not (1.5 <= t - f <= 4.5):
+                    I.append(("SHOTS", f"cảnh {s['id']} shots[{i}]: cú {t - f}s — nên 2-4s/cú."))
+            last = (shots or [{}])[-1].get("to")
+            if last and last > s.get("duration", 8):
+                W.append(("SHOTS", f"cảnh {s['id']}: shots kết ở {last}s > duration {s.get('duration', 8)}s."))
         vo = (s.get("vo") or "").strip()
         if vo:
             rate = len(vo.split()) / max(1, s.get("duration", 8))
@@ -640,6 +756,10 @@ async def cmd_qc_storyboard(a):  # async khớp dispatch; thân thuần local
                     and any(x.get("state") for x in scenes[:scenes.index(s)])):
                 I.append(("STATE", f"cảnh {s['id']}: sổ liên tục ĐỨT (cảnh trước có state, cảnh này "
                                    "trống) — time_of_day/weather vẫn kế thừa, wardrobe/condition thì không."))
+
+    if m.get("gates", {}).get("element_lock") is False:
+        W.append(("GATE", "element_lock (GATE 1A2) chưa mở — bảng element phải được duyệt "
+                          "TRƯỚC storyboard; compile sẽ chặn khi ghi thật."))
 
     for tag, items in (("⚠", W), ("ℹ", I)):
         for group, msg in items:
@@ -759,33 +879,83 @@ async def cmd_clip(a):
 async def cmd_scene_images(a):
     pdir = Path(a.project)
     m = load_manifest(pdir)
+    aspect = m.get("aspect", "portrait")
+    pid_flow = m.get("flow_project_id") or DEFAULT_PROJECT
+
+    async def gen_one(bridge, prompt: str, refs, out: Path):
+        """Gen 1 ảnh + tải về. Trả media_id hoặc None."""
+        results = await generate_image(bridge, prompt + ("" if a.allow_text else NO_TEXT),
+                                       aspect, pid_flow, count=a.count,
+                                       ref_media_ids=refs or None)
+        if not results:
+            return None
+        out.parent.mkdir(parents=True, exist_ok=True)
+        await download_image(bridge, results[0]["image_url"], str(out))
+        return results[0]["media_id"]
+
     todo = [s for s in m["scenes"]
             if (not a.scene or s["id"] in a.scene)
-            and s.get("mode", "i2v") in ("i2v", "fl")
-            and not (s.get("image", {}).get("media_id") and s["image"].get("approved"))]
-    if not todo:
-        print("Không có cảnh nào cần gen ảnh (đã đủ hoặc đã duyệt hết).")
-        return
+            and (s.get("mode", "i2v") in ("i2v", "fl") or shot_style(s) == "separate")]
     bridge = await open_bridge()
     try:
+        did = 0
         for s in todo:
-            refs = anchor_ids_for_scene(m, s)
+            # ── SHOT-FIRST: ảnh khung đầu TỪNG SHOT — MASTER trước, shot con derive ──
+            if shot_style(s) == "separate":
+                shots = s["shots"]
+                master = shots[0]
+                m_img = master.get("image") or {}
+                if not (m_img.get("media_id") and m_img.get("approved")):
+                    if m_img.get("media_id") and not m_img.get("approved"):
+                        print(f"— Cảnh {s['id']}: ảnh MASTER (shot {master.get('id')}) chờ duyệt "
+                              "— duyệt xong chạy lại để gen shot con (derive cần master).")
+                        continue
+                    out = pdir / "03_images" / f"scene{s['id']:02d}_s{master.get('id')}.png"
+                    print(f"— Cảnh {s['id']} shot {master.get('id')} [MASTER]: gen ảnh")
+                    mid = await gen_one(bridge, master.get("prompt") or s.get("prompt") or "",
+                                        anchor_ids_for_scene(m, s), out)
+                    if mid:
+                        patch_shot(pdir, s["id"], master.get("id"),
+                                   "image", {"file": str(out.relative_to(pdir)),
+                                             "media_id": mid, "approved": False})
+                        did += 1
+                        print(f"  → duyệt MASTER trước, rồi chạy lại gen shot con.")
+                    else:
+                        print(f"  ✗ shot master gen lỗi — chạy lại sau.")
+                    continue
+                # master đã duyệt → derive các shot con: ref = frame MASTER + anchor nhân vật
+                for sh in shots[1:]:
+                    img = sh.get("image") or {}
+                    if img.get("media_id") and img.get("approved"):
+                        continue
+                    out = pdir / "03_images" / f"scene{s['id']:02d}_s{sh.get('id')}.png"
+                    refs = ([m_img["media_id"]]
+                            + anchor_ids_for_scene(m, s, include_location=False))[:3]
+                    print(f"— Cảnh {s['id']} shot {sh.get('id')} [derive←master]: gen ảnh")
+                    mid = await gen_one(bridge, sh.get("prompt") or "", refs, out)
+                    if mid:
+                        patch_shot(pdir, s["id"], sh.get("id"),
+                                   "image", {"file": str(out.relative_to(pdir)),
+                                             "media_id": mid, "approved": False})
+                        did += 1
+                    else:
+                        print(f"  ✗ shot {sh.get('id')} gen lỗi — chạy lại sau.")
+                continue
+            # ── đường cũ: 1 ảnh cấp scene ──
+            if s.get("image", {}).get("media_id") and s["image"].get("approved"):
+                continue
             out = pdir / "03_images" / f"scene{s['id']:02d}.png"
+            refs = anchor_ids_for_scene(m, s)
             print(f"— Cảnh {s['id']}: gen ảnh (refs={len(refs)})")
-            prompt = s["prompt"] + ("" if a.allow_text else NO_TEXT)
-            results = await generate_image(bridge, prompt, m.get("aspect", "portrait"),
-                                           m.get("flow_project_id") or DEFAULT_PROJECT,
-                                           count=a.count, ref_media_ids=refs or None)
-            if not results:
+            mid = await gen_one(bridge, s["prompt"], refs, out)
+            if not mid:
                 print(f"  ✗ cảnh {s['id']} gen ảnh lỗi — bỏ qua, chạy lại sau.")
                 continue
-            out.parent.mkdir(parents=True, exist_ok=True)
-            await download_image(bridge, results[0]["image_url"], str(out))
-            new_img = {"file": str(out.relative_to(pdir)),
-                       "media_id": results[0]["media_id"], "approved": False}
-            s["image"] = new_img
-            patch_scene(pdir, s["id"], "image", new_img)  # merge-save: không đè sửa tay giữa chừng
-        print("Xong. Duyệt ảnh trong 03_images/ rồi set image.approved=true trước khi scene-clips.")
+            patch_scene(pdir, s["id"], "image",
+                        {"file": str(out.relative_to(pdir)), "media_id": mid, "approved": False})
+            did += 1
+        print(f"Xong ({did} ảnh). Duyệt trong 03_images/ rồi set image.approved=true "
+              "(per shot với cảnh shot-first) trước khi scene-clips.")
     finally:
         await bridge.close()
 
@@ -804,6 +974,9 @@ async def cmd_scene_clips(a):
             continue
         if s.get("clip", {}).get("status") == "done" and not a.regen:
             continue
+        if shot_style(s) == "separate":  # shot-first: điều kiện kiểm per shot ở vòng gen
+            todo.append(s)
+            continue
         mode = s.get("mode", "i2v")
         # link_prev lấy khung từ cảnh trước → KHÔNG cần ảnh riêng đã duyệt
         if mode in ("i2v", "fl") and not s.get("link_prev") and not s.get("image", {}).get("approved"):
@@ -819,6 +992,43 @@ async def cmd_scene_clips(a):
     bridge = await open_bridge()
     try:
         for s in todo:
+            # ── SHOT-FIRST: clip TỪNG SHOT (i2v từ ảnh shot đã duyệt) rồi STITCH về sceneNN.mp4 ──
+            if shot_style(s) == "separate":
+                pid_flow = m.get("flow_project_id") or DEFAULT_PROJECT
+                for sh in s["shots"]:
+                    clip = sh.get("clip") or {}
+                    if clip.get("status") == "done" and not a.regen:
+                        continue
+                    img = sh.get("image") or {}
+                    if not (img.get("media_id") and img.get("approved")):
+                        print(f"— Cảnh {s['id']} shot {sh.get('id')}: ảnh chưa duyệt, bỏ qua.")
+                        continue
+                    sout = pdir / "04_clips" / f"scene{s['id']:02d}_s{sh.get('id')}.mp4"
+                    gdur = _gen_duration(sh.get("duration"))
+                    mid = None
+                    for attempt in (1, 2):
+                        print(f"— Cảnh {s['id']} shot {sh.get('id')} [i2v {gdur}s] lần {attempt}…")
+                        mid = await gen_and_fetch_clip(bridge, "i2v", sh.get("prompt") or "",
+                                                       m.get("aspect", "portrait"), gdur,
+                                                       str(sout), image_id=img["media_id"],
+                                                       project_id=pid_flow)
+                        if mid:
+                            break
+                    patch_shot(pdir, s["id"], sh.get("id"), "clip",
+                               {"file": str(sout.relative_to(pdir)), "media_id": mid,
+                                "status": "done" if mid else "failed"})
+                    sh["clip"] = {"file": str(sout.relative_to(pdir)), "media_id": mid,
+                                  "status": "done" if mid else "failed"}
+                    print(f"  {'✓' if mid else '✗ FAILED (gen lại: --scene ' + str(s['id']) + ' --regen)'}")
+                stitched = stitch_shots(pdir, s)
+                if stitched:
+                    new_clip = {"file": stitched, "media_id": "", "status": "done"}
+                    s["clip"] = new_clip
+                    patch_scene(pdir, s["id"], "clip", new_clip)
+                    print(f"— Cảnh {s['id']}: ⧉ stitch {len(s['shots'])} shot → {stitched}")
+                else:
+                    print(f"— Cảnh {s['id']}: chưa stitch (còn shot thiếu/failed).")
+                continue
             mode = s.get("mode", "i2v")
             out = pdir / "04_clips" / f"scene{s['id']:02d}.mp4"
             kwargs = dict(project_id=m.get("flow_project_id") or DEFAULT_PROJECT)
@@ -1016,6 +1226,24 @@ async def cmd_compose_frame(a):
         await bridge.close()
 
 
+async def cmd_stitch_shots(a):  # async khớp dispatch; thân local (ffmpeg), KHÔNG cần bridge
+    """Ghép lại shot clips → sceneNN.mp4 cho các cảnh shot-first (dùng sau khi regen shot lẻ;
+    scene-clips đã tự stitch khi gen xong đủ shot)."""
+    pdir = Path(a.project)
+    m = load_manifest(pdir)
+    for s in m.get("scenes", []):
+        if a.scene and s["id"] not in a.scene:
+            continue
+        if shot_style(s) != "separate":
+            continue
+        out = stitch_shots(pdir, s)
+        if out:
+            patch_scene(pdir, s["id"], "clip", {"file": out, "media_id": "", "status": "done"})
+            print(f"— Cảnh {s['id']}: ⧉ stitch {len(s['shots'])} shot → {out}")
+        else:
+            print(f"— Cảnh {s['id']}: chưa stitch được (shot thiếu/failed).")
+
+
 async def cmd_qc_clips(a):  # async khớp dispatch; thân local (cv2), KHÔNG cần bridge
     """QC CONTINUITY trên CLIP THẬT (chốt chặn cuối trước assemble): trích frame đầu/giữa/cuối-nét
     mỗi clip → qc_clips/ + ledger.md (sổ liên tục máy-đọc-được). Claude vision đối chiếu frame với
@@ -1028,15 +1256,7 @@ async def cmd_qc_clips(a):  # async khớp dispatch; thân local (cv2), KHÔNG c
     qdir.mkdir(exist_ok=True)
     chars = {c["id"]: c for c in m.get("characters", [])}
     props = {p["id"]: p for p in m.get("props", [])}
-    rows, skipped = [], []
-    for s in m.get("scenes", []):
-        if a.scene and s["id"] not in a.scene:
-            continue
-        cf = s.get("clip", {}).get("file") or f"04_clips/scene{s['id']:02d}.mp4"
-        clip = pdir / cf
-        if not (clip.exists() and clip.stat().st_size > 0):
-            skipped.append(s["id"])
-            continue
+    def grab(clip: Path, stem: str) -> dict:
         cap = cv2.VideoCapture(str(clip))
         total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
         got = {}
@@ -1044,14 +1264,39 @@ async def cmd_qc_clips(a):  # async khớp dispatch; thân local (cv2), KHÔNG c
             cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
             ok, frame = cap.read()
             if ok:
-                p = qdir / f"scene{s['id']:02d}_{name}.png"
+                p = qdir / f"{stem}_{name}.png"
                 cv2.imwrite(str(p), frame)
                 got[name] = p.name
         cap.release()
-        endp = qdir / f"scene{s['id']:02d}_end.png"
+        endp = qdir / f"{stem}_end.png"
         if extract_sharp_end_frame(str(clip), str(endp)):
             got["end"] = endp.name
-        rows.append((s, got))
+        return got
+
+    rows, skipped = [], []
+    for s in m.get("scenes", []):
+        if a.scene and s["id"] not in a.scene:
+            continue
+        # SHOT-FIRST: trích frame TỪNG SHOT (soi được cả nội cảnh giữa các shot)
+        if shot_style(s) == "separate":
+            shot_rows = []
+            for sh in s["shots"]:
+                cf = (sh.get("clip") or {}).get("file") or \
+                    f"04_clips/scene{s['id']:02d}_s{sh.get('id')}.mp4"
+                clip = pdir / cf
+                if clip.exists() and clip.stat().st_size > 0:
+                    shot_rows.append((sh, grab(clip, f"scene{s['id']:02d}_s{sh.get('id')}")))
+            if shot_rows:
+                rows.append((s, {"__shots__": shot_rows}))
+            else:
+                skipped.append(s["id"])
+            continue
+        cf = s.get("clip", {}).get("file") or f"04_clips/scene{s['id']:02d}.mp4"
+        clip = pdir / cf
+        if not (clip.exists() and clip.stat().st_size > 0):
+            skipped.append(s["id"])
+            continue
+        rows.append((s, grab(clip, f"scene{s['id']:02d}")))
 
     lines = ["# Ledger QC clip — đối chiếu frame thật với sổ liên tục", "",
              "Checklist per cảnh (Claude vision đọc frame + mục cảnh tương ứng):",
@@ -1066,7 +1311,16 @@ async def cmd_qc_clips(a):  # async khớp dispatch; thân local (cv2), KHÔNG c
         st = effective_state(m, s)
         lines.append(f"## Cảnh {s['id']} — location={s.get('location') or '—'}, "
                      f"time={st.get('time_of_day') or '—'}, weather={st.get('weather') or '—'}")
-        lines.append("- Frames: " + " · ".join(f"qc_clips/{v}" for v in got.values()))
+        if "__shots__" in got:
+            for sh, g in got["__shots__"]:
+                lines.append(f"- Shot {sh.get('id')} ({sh.get('shot_size') or '?'}, "
+                             f"{sh.get('duration') or '?'}s): "
+                             + " · ".join(f"qc_clips/{v}" for v in g.values()))
+            lines.append("- SO NỘI CẢNH: các shot trên là CÙNG một khoảnh khắc/không gian — "
+                         "ánh sáng, trang phục, vị trí đồ vật phải LIỀN tuyệt đối giữa mọi shot "
+                         "(so end shot k với start shot k+1); shot con phải khớp không gian MASTER (shot đầu).")
+        else:
+            lines.append("- Frames: " + " · ".join(f"qc_clips/{v}" for v in got.values()))
         for cid in s.get("characters") or []:
             c = chars.get(cid) or {}
             anchor_files = ", ".join(x.get("file", "") for x in c.get("anchors", []) if x.get("file"))
@@ -1168,6 +1422,13 @@ def main():
     p.add_argument("--scene", type=int, nargs="*", help="chỉ các cảnh này")
     p.add_argument("--force", action="store_true", help="trích lại đè file cũ")
     p.set_defaults(fn=cmd_extract_chain)
+
+    p = sub.add_parser("stitch-shots",
+                       help="ghép lại shot clips → sceneNN.mp4 (tự chạy sau scene-clips; "
+                            "lệnh này cho lúc regen shot lẻ xong, local)")
+    p.add_argument("--project", required=True)
+    p.add_argument("--scene", type=int, nargs="*", help="chỉ các cảnh này")
+    p.set_defaults(fn=cmd_stitch_shots)
 
     p = sub.add_parser("qc-clips",
                        help="QC continuity trên CLIP THẬT: trích frame đầu/giữa/cuối + ledger.md "
