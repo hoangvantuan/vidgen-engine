@@ -20,7 +20,14 @@ Manifest là NGUỒN SỰ THẬT duy nhất về trạng thái dự án. Script 
   },
   "music": {                            // nhạc nền — auto-pick theo mood hoặc chỉ định file
     "mood": "",                         // calm|tense|uplifting|sad|epic|playful|neutral (rỗng = không nhạc)
-    "file": ""                          // nhạc cụ thể (ưu tiên hơn mood; CLI --bgm override cả hai)
+    "file": "",                         // nhạc cụ thể (ưu tiên hơn mood; CLI --bgm override cả hai)
+    "ambience": ""                      // (tùy chọn) ROOM TONE liền mạch — mô tả EN lớp nền không gian
+                                        //   ("quiet village night, soft wind, distant crickets, continuous
+                                        //   ambient bed, no melody, seamless loop"). CÓ CONSUMER:
+                                        //   gen_sfx.py --ambience gen 1 file 22s → assemble loop-crossfade
+                                        //   phủ TRỌN video, volume thấp KHÔNG ducking — keo dán số 1 của
+                                        //   ngành dựng: lớp âm LIỀN xuyên mọi cắt "dán" clip gen rời thành
+                                        //   một không gian. KHÁC sfx[] (sự kiện, đặt theo cảnh) và mood (nhạc).
   },
 
   "endcard_tagline": "",                // (tùy chọn) Ô BIẾN THIÊN 1 DÒNG của end-card brand — CONSUMER:

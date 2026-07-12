@@ -8,6 +8,8 @@
 - Không có narration → mỗi cảnh giữ đúng scene.duration.
 - Burn sub .ass (bỏ bằng --no-burn để giao CapCut) · nhạc nền ducking theo giọng
   (sidechaincompress) · end-card nán cuối chống cụt.
+- KEO DÁN chống "mùi AI" tầng dựng (đợt 2): kéo chậm CÓ TRẦN (--max-slow) + hold frame ·
+  grain/LUT thống nhất toàn phim (--grain/--lut) · ambience liền mạch xuyên cắt (--ambience).
 
 Cần: ffmpeg. Ví dụ:
   ~/.venv/claude/bin/python assemble.py --project projects/con-cao --bgm nhac.mp3
@@ -72,6 +74,42 @@ def norm_transition(tr):
     return None
 
 
+def apply_ambience_layer(video, amb, vol):
+    """KEO DÁN #1 (ngành dựng): room tone/ambience LIỀN MẠCH chạy xuyên mọi cắt "dán" các clip
+    gen rời thành một không gian — thiếu nó, cắt rơi vào im lặng phi tự nhiên. Nguồn 1 file ~22s
+    (gen_sfx.py --ambience) → loop CÓ CROSSFADE (không seam) phủ trọn video, volume THẤP CỐ ĐỊNH,
+    KHÔNG ducking (chính sự liên tục là keo; duck theo giọng sẽ phập phồng lộ). Lớp phủ riêng
+    như apply_sfx_layer — không đụng graph mix chính."""
+    total, sd, xd = dur(video), dur(amb), 2.0
+    n = 1
+    while sd + (n - 1) * (sd - xd) < total + 1 and n < 60:
+        n += 1
+    has_a = bool(subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "a", "-show_entries", "stream=index",
+         "-of", "csv=p=0", str(video)], capture_output=True, text=True).stdout.strip())
+    ins, fc = [], []
+    for _ in range(n):
+        ins += ["-i", str(amb)]
+    prev = "[1:a]"
+    for i in range(2, n + 1):
+        fc.append(f"{prev}[{i}:a]acrossfade=d={xd}[c{i}]")
+        prev = f"[c{i}]"
+    fc.append(f"{prev}atrim=0:{total:.3f},volume={vol},afade=t=in:st=0:d=1,"
+              f"afade=t=out:st={max(0, total - 2):.2f}:d=2[amb]")
+    if has_a:
+        fc.append("[0:a][amb]amix=inputs=2:normalize=0:duration=first[mx];"
+                  "[mx]alimiter=limit=0.95[aout]")
+    else:
+        fc.append("[amb]anull[aout]")
+    tmp = video.with_name(video.stem + "__ambtmp" + video.suffix)
+    run(["ffmpeg", "-y", "-v", "error", "-i", str(video), *ins,
+         "-filter_complex", ";".join(fc), "-map", "0:v", "-c:v", "copy",
+         "-map", "[aout]", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", str(tmp)])
+    tmp.replace(video)
+    print(f"🌫 Ambience liền mạch: {Path(amb).name} loop×{n} crossfade {xd}s, vol={vol} (không duck)")
+    return True
+
+
 def apply_sfx_layer(video, pdir, sfx_vol):
     """Consumer cho scenes[].sfx[] — trộn SFX làm LỚP THỨ 3 (dưới giọng + trên nhạc), đặt đúng
     thời điểm mỗi cảnh theo 05_audio/timings.json. File nguồn: 05_audio/sfx/sfxNN.mp3 (gen bằng
@@ -121,6 +159,19 @@ def main():
                     help="lớp SFX từ 05_audio/sfx/ (auto=mix nếu có file; off=bỏ). Consumer cho scenes[].sfx[]")
     ap.add_argument("--sfx-vol", type=float, default=0.35,
                     help="âm lượng SFX (dưới giọng; default 0.35)")
+    ap.add_argument("--ambience", default="auto",
+                    help="room tone LIỀN MẠCH xuyên cắt (keo dán clip rời): auto=dùng 05_audio/ambience.mp3 "
+                         "nếu có (gen bằng gen_sfx.py --ambience) · off=bỏ · <file>=chỉ định")
+    ap.add_argument("--ambience-vol", dest="ambience_vol", type=float, default=0.25,
+                    help="âm lượng ambience (THẤP, dưới SFX, không ducking; default 0.25)")
+    ap.add_argument("--max-slow", dest="max_slow", type=float, default=1.15,
+                    help="TRẦN kéo chậm clip khớp VO (default 1.15 ≈ khó nhận ra); phần thiếu còn lại "
+                         "hold frame cuối. Kéo chậm vô hạn = cảm giác trôi nổi. Hành vi cũ: --max-slow 99")
+    ap.add_argument("--lut", default="", help="file .cube — 1 color grade THỐNG NHẤT toàn phim "
+                    "(ủi chênh màu giữa các clip gen rời), áp trước burn sub")
+    ap.add_argument("--grain", type=float, default=5,
+                    help="film grain đồng nhất phủ toàn thân video — dán texture giữa clip AI "
+                         "(default 5, rất nhẹ; 0=tắt)")
     ap.add_argument("--endcard", default="", help="ảnh end-card cuối (tùy chọn)")
     ap.add_argument("--endcard-dur", type=float, default=2.5)
     ap.add_argument("--tail", type=float, default=1.5, help="giây nán thêm sau khi giọng dứt (chống cụt)")
@@ -222,8 +273,21 @@ def main():
                  "-t", f"{tgt:.3f}", "-an", "-c:v", "libx264", "-preset", "fast", "-crf", "18", str(o)])
         else:
             src = pdir / s["clip"]["file"]
-            ratio = max(1.0, tgt / dur(src))
-            vf = cover + (f",setpts=PTS*{ratio:.6f}" if ratio > 1.001 else "") + ",fps=30,format=yuv420p"
+            sd = dur(src)
+            # Clip DÀI hơn đích → cắt lấy ĐOẠN ĐẦU giữ tốc độ thật (chất lượng clip AI đạt đỉnh
+            # 4-6s đầu, đuôi generation hay rã). NGẮN hơn → làm chậm CÓ TRẦN (--max-slow, mặc định
+            # 1.15 ≈ dưới ngưỡng mắt bắt slow-mo); phần vẫn thiếu → HOLD frame cuối (tpad clone).
+            # Kéo chậm không trần là nguồn cảm giác "trôi nổi" — mùi AI ở tầng dựng.
+            ratio = min(max(1.0, tgt / sd), max(1.0, a.max_slow))
+            lack = tgt - sd * ratio
+            vf = cover + (f",setpts=PTS*{ratio:.6f}" if ratio > 1.001 else "")
+            if lack > 0.05:
+                vf += f",tpad=stop_mode=clone:stop_duration={lack + 0.2:.3f}"
+                (print if lack <= 2.0 else lambda t: print("⚠ " + t))(
+                    f"  cảnh {s['id']}: VO dài hơn clip {tgt - sd:.1f}s → chậm x{ratio:.2f} "
+                    f"+ hold frame cuối {lack:.1f}s"
+                    + ("" if lack <= 2.0 else " — HOLD DÀI, cân lại VO/duration cảnh này (gốc ở storyboard)"))
+            vf += ",fps=30,format=yuv420p"
             run(["ffmpeg", "-y", "-v", "error", "-i", str(src), "-vf", vf,
                  "-t", f"{tgt:.3f}", "-an", "-c:v", "libx264", "-preset", "fast", "-crf", "18", str(o)])
         norm.append(o)
@@ -284,10 +348,18 @@ def main():
     if ass.exists() and not a.no_burn and not can_burn:
         print("⚠ ffmpeg này thiếu libass (bản brew rút gọn) — không burn được sub. "
               "Sẽ xuất sub rời cạnh final. Cài bản đủ: brew reinstall ffmpeg (cần --enable-libass).")
+
+    def esc(p):  # path trong filter graph phải escape : \ '
+        return str(p).replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
+
+    # KEO DÁN #2: grade + grain THỐNG NHẤT toàn thân video (ủi chênh màu/texture giữa các clip
+    # gen rời — mỗi generation một "chất" ảnh hơi khác). Áp TRƯỚC burn sub để chữ sạch.
     vf = []
+    if a.lut:
+        vf.append(f"lut3d=file='{esc(a.lut)}'")
+    if a.grain > 0:
+        vf.append(f"noise=alls={a.grain:g}:allf=t+u")
     if can_burn:
-        def esc(p):  # path trong filter graph phải escape : \ '
-            return str(p).replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
         vf.append(f"subtitles=filename='{esc(ass)}'" + (f":fontsdir='{esc(fonts)}'" if fonts else ""))
 
     cmd = ["ffmpeg", "-y", "-v", "error", "-i", str(body)]
@@ -323,7 +395,13 @@ def main():
             "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", str(out)]
     run(cmd)
 
-    # ── Lớp SFX (consumer cho scenes[].sfx[]) — áp TRƯỚC light để bản nhẹ kế thừa ──
+    # ── Lớp ambience liền mạch (keo dán #1) rồi lớp SFX — đều TRƯỚC light để bản nhẹ kế thừa ──
+    if a.ambience != "off":
+        amb = pdir / "05_audio" / "ambience.mp3" if a.ambience == "auto" else Path(a.ambience)
+        if amb.exists():
+            apply_ambience_layer(out, amb, a.ambience_vol)
+        elif a.ambience != "auto":
+            print(f"⚠ không thấy file ambience: {amb}")
     if a.sfx != "off":
         apply_sfx_layer(out, pdir, a.sfx_vol)
 

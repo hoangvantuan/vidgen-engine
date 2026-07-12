@@ -70,6 +70,21 @@ $PY $SK/assemble.py --project projects/<tên>                  # --sfx auto: t�
 `gen_sfx.py` đọc `sfx[]` + `timings.json` → gen đúng độ dài mỗi cảnh; assemble đặt theo timing, ducking
 dưới giọng, limiter chống clip. Tắt bằng `--sfx off`, chỉnh to nhỏ bằng `--sfx-vol` (mặc định 0.35).
 Chọn ~6-8 cảnh chủ chốt, đừng gen cả 15 (rối tiếng). Field `sfx[]` nhờ vậy KHÔNG còn mồ côi.
+
+**KEO DÁN chống "mùi AI" tầng dựng (đợt 2 — 3 lớp, mặc định bật những gì an toàn):**
+- **Ambience liền mạch (keo #1, mạnh nhất):** manifest có `music.ambience` (mô tả room tone EN) →
+  `$PY $SK/gen_sfx.py --project ... --ambience` gen 1 file 22s → assemble TỰ loop-crossfade (không
+  seam) phủ trọn video, volume thấp **không ducking** (chính sự LIÊN TỤC xuyên mọi cắt là keo —
+  thiếu nó cắt rơi vào im lặng phi tự nhiên, lộ clip rời). Chỉnh `--ambience-vol` (0.25), tắt
+  `--ambience off`, file riêng `--ambience <file>`.
+- **Grain + LUT thống nhất (keo #2):** mỗi generation một "chất" ảnh hơi khác → `--grain` (mặc định
+  5, rất nhẹ; 0=tắt) phủ nhiễu phim ĐỒNG NHẤT toàn thân video dán texture; có file grade thì
+  `--lut film.cube` áp 1 màu toàn phim (ủi chênh màu giữa clip). Cả hai áp TRƯỚC burn sub (chữ sạch).
+- **Trần kéo chậm (keo #3):** VO dài hơn clip → trước đây kéo chậm KHÔNG TRẦN (nguồn cảm giác
+  trôi nổi slow-motion). Giờ `--max-slow` (mặc định 1.15 ≈ dưới ngưỡng mắt bắt) + phần thiếu HOLD
+  frame cuối; thiếu >2s script cảnh báo ĐÚNG CẢNH — gốc ở VO/duration lệch, sửa tại storyboard,
+  đừng nới trần. Chiều ngược (clip dài hơn) vẫn cắt lấy đoạn ĐẦU — chất lượng clip AI đỉnh ở 4-6s
+  đầu, đuôi generation hay rã.
 Làm gì: mỗi clip cover-crop đúng khung (Flow trả 720×1280, tự scale lên) + bỏ audio gốc Veo
 + retime khớp `timings.json` (clip DÀI hơn đích → cắt giữ tốc độ thật; NGẮN hơn → làm chậm
 mượt bằng setpts — không freeze, không giật) → nối → burn sub → nhạc nền ducking theo giọng

@@ -7,9 +7,15 @@ Vì sao tồn tại: clip Veo tự sinh audio nhưng assemble bỏ (-an) do Veo 
 đè lời đọc. Field sfx[] vì thế từng MỒ CÔI (khai mà không ai dùng). Script này là đường tiêu thụ:
 sfx[] → file SFX sạch, kiểm soát → lớp thứ 3 dưới giọng.
 
+Chế độ 2 — AMBIENCE (keo dán #1 tầng dựng): --ambience gen 1 file room tone ~22s từ
+`music.ambience` (manifest) → 05_audio/ambience.mp3; assemble tự loop-crossfade phủ TRỌN video,
+volume thấp không ducking — lớp nền LIỀN MẠCH xuyên mọi cắt "dán" các clip gen rời thành một
+không gian (thiếu nó, cắt rơi vào im lặng phi tự nhiên).
+
 Cần ELEVENLABS_API_KEY (export). Ví dụ:
   ~/.venv/claude/bin/python gen_sfx.py --project projects/<tên>              # gen mọi cảnh có sfx[]
   ~/.venv/claude/bin/python gen_sfx.py --project projects/<tên> --scenes 2,5,14   # chọn cảnh chủ chốt
+  ~/.venv/claude/bin/python gen_sfx.py --project projects/<tên> --ambience       # room tone liền mạch
 """
 import argparse
 import json
@@ -30,6 +36,9 @@ def main():
     ap.add_argument("--scenes", default="", help="danh sách id cảnh cần gen (vd '2,5,14'); rỗng = mọi cảnh có sfx[]")
     ap.add_argument("--prompt-influence", type=float, default=0.4)
     ap.add_argument("--force", action="store_true", help="gen đè cả khi file đã tồn tại")
+    ap.add_argument("--ambience", action="store_true",
+                    help="gen ROOM TONE liền mạch (~22s, loopable) từ music.ambience trong manifest "
+                         "→ 05_audio/ambience.mp3; assemble tự loop-crossfade phủ trọn video")
     a = ap.parse_args()
 
     if not os.environ.get("ELEVENLABS_API_KEY"):
@@ -47,6 +56,26 @@ def main():
 
     from elevenlabs import ElevenLabs
     client = ElevenLabs()
+
+    if a.ambience:
+        # Chế độ ambience: 1 file room tone loopable — mô tả lấy từ music.ambience (project-level).
+        music = m.get("music") if isinstance(m.get("music"), dict) else {}
+        text = ((music or {}).get("ambience") or "").strip()
+        if not text:
+            raise SystemExit('Manifest chưa có music.ambience — điền mô tả room tone (EN), vd: '
+                             '"quiet rural village night, soft wind, distant crickets, continuous '
+                             'ambient bed, no melody, no sudden events, seamless loop".')
+        out = pdir / "05_audio" / "ambience.mp3"
+        if out.exists() and not a.force:
+            raise SystemExit(f"{out} đã có — dùng --force để gen đè.")
+        audio = client.text_to_sound_effects.convert(
+            text=text, duration_seconds=22.0, prompt_influence=a.prompt_influence)
+        with open(out, "wb") as f:
+            for chunk in audio:
+                f.write(chunk)
+        print(f'🌫 ambience [22.0s] ← "{text}" → {out}\n'
+              "assemble.py tự loop-crossfade phủ trọn video (--ambience auto, --ambience-vol 0.25).")
+        return
 
     done, skipped = [], []
     for s in m.get("scenes", []):

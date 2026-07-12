@@ -31,6 +31,26 @@ Từ chuẩn mixing (thay cho tham số cũ hơi mạnh tay ratio 8/attack 5):
 - **Nguồn nhạc:** thư viện `assets/bgm/<mood>/` (assemble auto-pick theo `music.mood`), hoặc **gen
   bằng skill `music`** (ElevenLabs Music — composition plan nhiều đoạn theo cung cảm xúc, hợp kể chuyện).
 
+## 2b · Ba lớp KEO DÁN chống "mùi AI" tầng dựng (đợt 2)
+
+Clip AI gen RỜI từng cảnh — mỗi generation một chất ảnh, một mức sáng, không khí âm thanh đứt
+quãng. Ngành dựng phim có sẵn 3 keo, đều đã thực thi trong `assemble.py`:
+
+1. **Ambience/room tone LIỀN MẠCH (mạnh nhất):** một lớp âm nền chạy XUYÊN mọi cắt khiến cắt "vô
+   hình" — thiếu nó, mỗi cắt rơi vào im lặng phi tự nhiên, lộ ngay chuỗi clip rời (quy ước ngành,
+   StudioBinder room tone). Pipeline: `music.ambience` (manifest, mô tả EN: nền KHÔNG giai điệu,
+   không sự kiện đột ngột, "continuous, seamless loop") → `gen_sfx.py --ambience` (1 file 22s) →
+   assemble loop-CROSSFADE phủ trọn video, volume thấp (0.25), **KHÔNG ducking** — sự liên tục
+   chính là keo, duck theo giọng sẽ phập phồng. Phân vai 3 lớp âm: ambience = KHÔNG GIAN (liền),
+   sfx[] = SỰ KIỆN (đặt theo cảnh), music = CẢM XÚC (ducking dưới giọng).
+2. **Grade + grain thống nhất:** 1 LUT `.cube` toàn phim (`--lut`, ffmpeg lut3d) ủi chênh màu giữa
+   các clip; grain nhẹ ĐỒNG NHẤT (`--grain`, mặc định 5) phủ toàn thân video dán texture — mắt đọc
+   "một cuộn phim" thay vì nhiều nguồn ảnh. Áp trước burn sub.
+3. **Trần kéo chậm (`--max-slow` 1.15) + hold frame:** kéo chậm vô hạn khớp VO là nguồn cảm giác
+   "trôi nổi slow-motion" đặc trưng video AI; clip dài hơn đích thì cắt lấy đoạn ĐẦU (chất lượng
+   generation đỉnh ở 4-6s đầu, đuôi hay rã — mẹo cộng đồng nhất quán nhiều nguồn). Hold >2s là
+   triệu chứng VO/duration lệch — sửa ở storyboard, đừng nới trần.
+
 ## 3 · Giọng đọc (VO)
 
 - Câu ngắn, chủ động, đọc to nghe tự nhiên. **Cấm em-dash `—`** trong VO tiếng Việt (AI đọc vấp).
