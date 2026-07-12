@@ -36,6 +36,11 @@ khoảng lặng giữa lượt (mặc định 0.25s). Không có `dialogue[]` �
 ở `../vidgen-script/references/project-schema.md`.
 
 Đọc VO mọi cảnh từ manifest → xuất `05_audio/narration.mp3` + `subs.ass` + `timings.json`.
+**Lead-in mặc định 0.7s (J-cut mở màn):** hình + ambience vào từ 0.0, GIỌNG vào sau 0.7s — cold
+open ≠ cold start, giọng nổ đúng frame 0 nghe đột ngột (bài học đo được: VO từng bắt đầu ở 0.0s).
+Toàn bộ timeline lời/sub/timings dịch theo, assemble cho cảnh đầu chạy hình từ 0.0 nên tổng vẫn
+khớp. Chỉnh `--lead-in <giây>`; `--lead-in 0` = hành vi cũ. KHÔNG phải "dạo đầu nội dung" — câu VO
+đầu vẫn là câu hook, chỉ tầng DỰNG có hơi thở.
 **Phụ đề mặc định KARAOKE word-level** (tô sáng chạy theo từng chữ, dùng timestamp ElevenLabs sẵn
 có), font Be Vietnam Pro, safe-zone 9:16. Tùy chọn: `--plain` (sub tĩnh), `--highlight cyan|yellow`,
 `--max-words 5`. Quy ước styling + lý do — LƯU Ý karaoke là quy ước DỄ ĐỌC, KHÔNG hứa số retention

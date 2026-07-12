@@ -225,17 +225,20 @@ def main():
     # ── thời lượng đích từng cảnh ──
     if has_voice and timings_f.exists():
         tm = {t["id"]: t for t in json.loads(timings_f.read_text(encoding="utf-8"))}
-        starts = [tm[s["id"]]["start"] for s in scenes if s["id"] in tm]
         ends = [tm[s["id"]]["end"] for s in scenes if s["id"] in tm]
         targets = []
+        first_tm = True  # cảnh có-timing ĐẦU TIÊN ôm trọn từ 0.0 (lead-in: hình vào trước, giọng sau)
         for i, s in enumerate(scenes):
             if s["id"] not in tm:
                 targets.append(float(s.get("duration", 8)))
-            elif i + 1 < len(scenes) and scenes[i + 1]["id"] in tm:
-                targets.append(tm[scenes[i + 1]["id"]]["start"] - tm[s["id"]]["start"])
+                continue
+            t0 = 0.0 if first_tm else tm[s["id"]]["start"]
+            first_tm = False
+            if i + 1 < len(scenes) and scenes[i + 1]["id"] in tm:
+                targets.append(tm[scenes[i + 1]["id"]]["start"] - t0)
             else:
-                targets.append(ends[-1] - tm[s["id"]]["start"] + (0 if a.endcard else a.tail))
-        total = (starts[0] if starts else 0) + sum(targets)
+                targets.append(ends[-1] - t0 + (0 if a.endcard else a.tail))
+        total = sum(targets)
     else:
         targets = [float(s.get("duration", 8)) for s in scenes]
         total = sum(targets)

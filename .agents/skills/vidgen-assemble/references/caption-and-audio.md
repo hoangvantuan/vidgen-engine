@@ -68,6 +68,10 @@ quãng. Ngành dựng phim có sẵn 3 keo, đều đã thực thi trong `assemb
 - **J-cut** (tiếng cảnh sau vào TRƯỚC hình) — tạo mong đợi, dẫn dắt; **L-cut** (tiếng cảnh trước
   kéo SANG hình cảnh sau) — giữ mạch, làm mượt đổi bối cảnh. Hai loại này làm ở tầng AUDIO khi ráp
   (giọng/âm dẫn hoặc trễ so với cắt hình), không phải xfade hình.
+- **J-cut MỞ MÀN (đã thực thi — `tts_to_ass --lead-in`, mặc định 0.7s):** hình + ambience vào từ
+  0.0, giọng vào sau ~0.7s. Phân biệt 2 tầng: "vào thẳng" ở tầng NỘI DUNG (câu đầu không dạo — giữ,
+  best practice feed) ≠ "cold start" ở tầng DỰNG (mọi thứ nổ cùng lúc frame 0 — nghe đột ngột, không
+  chuyên nghiệp). Lead-in không phí hook 3s: frame hình gây tò mò vẫn chạy ngay 0.0.
 
 ## Map vào stage
 

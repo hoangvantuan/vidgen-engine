@@ -226,6 +226,13 @@ def generate_per_scene(a, m, pdir, aspect, ec, vs):
     timings = []
     offset = 0.0
     seg_i = 0
+    if a.lead_in > 0:  # J-cut mở màn: khoảng thở đầu, hình/ambience vào trước, giọng vào sau
+        lead = work / "lead.wav"
+        subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi",
+                        "-i", "anullsrc=r=44100:cl=mono", "-t", f"{a.lead_in:.3f}", str(lead)],
+                       check=True)
+        concat_list.append(lead)
+        offset += a.lead_in
     for s in m["scenes"]:
         segs = scene_segments(s, vmap, narrator, missing)
         if not segs:
@@ -354,6 +361,10 @@ def main():
     ap.add_argument("--gap", type=float, default=0.25,
                     help="khoảng lặng (giây) chèn giữa các lượt thoại/cảnh ở ĐƯỜNG ĐA GIỌNG "
                          "(kích hoạt khi có dialogue[]). Cho nhịp thở giữa các lượt; 0 = nối sát")
+    ap.add_argument("--lead-in", dest="lead_in", type=float, default=0.7,
+                    help="khoảng thở ĐẦU video trước khi giọng vào (J-cut mở màn: hình + ambience "
+                         "chạy từ 0.0, giọng vào sau). Cold open ≠ cold start — giọng nổ đúng frame 0 "
+                         "nghe đột ngột. Dịch toàn bộ timeline lời/sub/timings; 0 = hành vi cũ")
     a = ap.parse_args()
 
     key = os.environ.get("ELEVENLABS_API_KEY")
@@ -431,6 +442,16 @@ def main():
         os.replace(tmp, out_audio)
     al = r.alignment
     chars, st, en = al.characters, al.character_start_times_seconds, al.character_end_times_seconds
+    if a.lead_in > 0:
+        # J-cut mở màn (đường 1-lệnh): pad lặng đầu audio + dịch toàn bộ timestamp → sub/timings
+        # tự khớp. Hình + ambience vào từ 0.0, giọng vào sau lead_in — cold open ≠ cold start.
+        st = [x + a.lead_in for x in st]
+        en = [x + a.lead_in for x in en]
+        tmp = out_audio + ".lead.mp3"
+        subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", out_audio,
+                        "-af", f"adelay={int(a.lead_in * 1000)}:all=1",
+                        "-c:a", "libmp3lame", "-q:a", "2", tmp], check=True)
+        os.replace(tmp, out_audio)
 
     # ── sub .ass: karaoke word-level (mặc định) hoặc tĩnh (--plain) ──
     words = build_words(chars, st, en)
