@@ -27,6 +27,12 @@ User duyệt danh tính (mặt, trang phục, vibe) TRÊN CHAR SHEET trước �
 
 ## Bước 2 · Anchor (cho máy)
 
+**MỌI nhân vật xuất hiện mặt-rõ (medium trở gần) hoặc lặp ≥2 cảnh đều phải có entry + anchor —
+KHÔNG phân biệt chính/phụ.** Bài học đo được (bé Tuệ An): mẹ/bà cụ/các em chỉ là chữ trong action
+→ mỗi generation Veo bịa một người khác — chính là nguồn "chi tiết lệch" lớn nhất. `flowgen
+qc-storyboard` (nhóm THỰC THỂ) bắt nhân vật mồ côi; đám đông/người nền thì KHÔNG anchor, viết
+action né mặt (turned away / silhouette / out of focus).
+
 Nhân vật luôn 1 góc + video ngắn → chỉ cần 1 anchor. Đổi nhiều góc → mỗi góc 1 anchor.
 Gen TỪNG anchor riêng (không cắt từ sheet — chất lượng thấp):
 ```bash
@@ -54,13 +60,29 @@ $PY $GEN t2i --prompt "3x3 grid of 9 frames of THE SAME location from different 
 consistent lighting and props across all 9 frames, <style chung>" \
   --aspect landscape --out projects/<tên>/02_locations/<id>_grid.png
 ```
-Rồi gen **từng location anchor riêng** (KHÔNG người, style chung) để lấy media_id cho máy bám:
+Rồi gen **từng location anchor riêng** (KHÔNG người, style chung) để lấy media_id cho máy bám —
+**ĐỦ 9 GÓC theo grid ngay từ đầu** (wide/corner/reverse/left/right/high/low/detail/entrance —
+bám sát 9 ô của grid đã duyệt, mỗi góc 1 lệnh t2i, đặt `angle` đúng tên góc):
 ```bash
 $PY $GEN t2i --prompt "<location desc EN>, wide establishing view, no people, \
 consistent props, <style chung>" --aspect landscape \
   --out projects/<tên>/02_locations/<id>_wide.png
 ```
 Yêu cầu location anchor: **KHÔNG có người · nền/bối cảnh đầy đủ · style + ánh sáng đồng bộ**.
+Vì sao đủ 9 từ đầu (đã chốt, mandate chất-lượng-trước-credit): cảnh dùng góc THIẾU anchor →
+Veo tự bịa layout từ chữ → nhà cửa/hàng cây mỗi cảnh một kiểu; ảnh miễn phí, chỉ tốn công duyệt.
+
+## Bước 2c · Hero-prop anchor — KHOÁ ĐẠO CỤ (props[] registry)
+
+Đạo cụ lặp ≥2 cảnh phải có entry trong `props[]` (desc chuẩn — compiler lặp nguyên văn, hết
+"mỗi cảnh tả bát cháo một kiểu"). Trong đó **hero-prop** (gần camera / mang nghĩa truyện, vd củ
+khoai) PHẢI có ảnh anchor:
+```bash
+$PY $GEN t2i --prompt "<prop desc EN>, product still, plain neutral background, \
+single object, <style chung>" --aspect square --out projects/<tên>/02_props/<id>.png
+```
+Ghi `media_id` vào `props[].anchor`. Prop GẮN BỐI CẢNH (nồi trên bếp, chum nước) → đừng anchor
+riêng, **BAKE thẳng vào ảnh location anchor** (Veo neo theo, không tốn slot ref).
 > **Neo TỈ LỆ tại đây:** scale vật-với-vật dựng trong location anchor (vd cây khổng lồ cạnh
 > người) được Veo **bảo toàn qua mọi cảnh**. Muốn tỉ lệ lệch-thực NHẤT QUÁN theo style archetype
 > (`vidgen-clips/references/veo-prompt-craft.md` mục 2b) → bake sẵn vào anchor, đừng chỉ dựa prompt keyword (dễ trôi).
@@ -80,9 +102,12 @@ làm clip thử** — nội dung nhạy cảm nhất (trẻ em/bạo lực/đau 
 Cảnh khó nhất qua được thì phần còn lại gần như chắc qua; nó chặn thì biết NGAY (1 credit) thay vì vỡ giữa
 batch (chục credit). Đừng chọn cảnh phong cảnh/tĩnh cho "chắc ăn" — chắc ăn kiểu đó là tự lừa.
 **Dự án có cảnh coverage (`shots[]`, timestamp prompting):** clip thử NÊN là (hoặc kèm) MỘT cảnh
-coverage — độ "nghe lời" mốc thời gian của Veo chưa kiểm chứng độc lập, phải đo thật TRƯỚC khi cả
+coverage — đã kiểm chứng nội bộ 1 mẫu nhưng 1 mẫu ≠ khái quát, mỗi dự án vẫn đo thật TRƯỚC khi cả
 batch đặt cược vào nó. Soi: có cắt đúng mốc không? các cú có giữ nhân vật/ánh sáng nội tại không?
 Không đạt → hạ cảnh đó về 1 cú hoặc chuyển đường master→regen (`scene-grammar.md §6b`).
+**Dự án có cảnh composite (`composite:true`, cảnh đông thực thể):** clip thử PHẢI kèm 1 cảnh đi
+đường `compose-frame` → i2v — đường composite CHƯA kiểm chứng thật trên engine này; soi khung
+composite giữ đúng mặt TỪNG nhân vật (không trộn), rồi clip i2v có giữ tiếp không.
 
 Gen thử cảnh rủi ro nhất có nhân vật:
 ```bash
@@ -102,6 +127,9 @@ vd "frame nào của clip thử LỆCH anchor nhất — chấp nhận được 
 ☐ anchor 1-người/1-góc/nền trơn/rõ mặt ☐ clip thử giữ mặt khớp anchor qua các frame
 ☐ không AI-tell (thừa ngón, méo mặt, morphing) ☐ style đồng bộ giữa mọi anchor.
 ☐ **tỉ lệ vật-với-vật khớp style archetype?** (tả thực = đúng đời thực; cách điệu = lệch có chủ đích, không phải lỗi).
+☐ **duyệt anchor theo LÔ — so CHÉO style toàn bộ:** bày MỌI anchor cạnh nhau (nhân vật ×N góc +
+location ×9 + hero-prop) trong 1 lượt xem; 1 anchor lệch style (màu, nét vẽ, ánh sáng) = mọi cảnh
+dùng nó lệch theo — **lỗi nhân bản từ gốc, phải bắt TRƯỚC khi lock**, gen lại anchor lệch (miễn phí).
 User gật → set `gates.character_lock = true`.
 Từ đây **danh tính nhân vật KHÓA** — không đổi desc/anchor giữa chừng; đổi = gen lại từ đầu.
 

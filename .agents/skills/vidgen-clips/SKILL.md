@@ -9,6 +9,20 @@ Kinh tế của stage này: **ảnh miễn phí, video tốn credit**. Vì vậy
 gen ảnh khung đầu → user duyệt ảnh (rẻ) → mới I2V (đắt, 1 lần/cảnh). Mọi tiến độ ghi vào
 `project.json` sau TỪNG cảnh — đứt giữa chừng chạy lại không mất gì, không gen trùng.
 
+**BA ĐƯỜNG GEN theo số thực thể cần neo** (ngân sách 3 ref/generation — bảng đầy đủ + luật ưu
+tiên slot: `project-schema.md` mục "Ba đường gen"):
+1. Cảnh thường (≤2 nhân vật mặt rõ + location) → **i2v từ ảnh đã duyệt** (Bước 1-2 dưới).
+2. Cảnh coverage `shots[]` → **r2v + anchor** (nhân vật > hero-prop > location; `ref_prev` thay
+   location anchor khi cắt đổi góc cùng không gian).
+3. Cảnh ĐÔNG (`composite: true`) → **compose-frame** ghép dần từng thực thể vào khung đầu
+   (miễn phí, mỗi lượt ≤3 ref TÍCH LŨY) → duyệt khung → i2v như thường:
+   ```bash
+   $PY $GEN compose-frame --project projects/<tên> --scene 4   # 1 cảnh/lần, duyệt từng khung
+   ```
+   Khung cuối lệch → soi từng lượt `03_images/sceneNN_comp_K.png` tìm lượt hỏng, sửa rồi chạy lại.
+**LUẬT chất lượng: mọi khung đầu (kể cả composite, kể cả khung chain) phải NGƯỜI duyệt trước khi
+đốt credit.**
+
 **Craft prompt (đọc trước khi gen/soi):** công thức prompt Veo 5 phần, vựng camera/cỡ cảnh, negative
 prompt tránh AI-tell, cách né chặn nội dung → `references/veo-prompt-craft.md`. Veo 3 còn **sinh
 audio (SFX/ambience) ngay từ prompt** — hữu ích cho cảnh không lời đọc.
@@ -54,12 +68,33 @@ motion-blur) → dùng làm khung đầu cảnh này → không gian/chuyển đ
 mượt. Ràng buộc: **gen TUẦN TỰ** (cảnh trước phải xong trước — cùng run hoặc run trước), nên tránh
 `--scene N` lẻ làm đứt chuỗi. Chỉ bật cho cặp cảnh CÙNG mạch/bối cảnh; đổi cảnh hoàn toàn thì để `false`
 và dùng transition biên tập (cut/match cut) ở Stage 4.
+**Duyệt khung chain TRƯỚC khi đốt credit** (luật khung-đầu-phải-qua-mắt-người):
+```bash
+$PY $GEN extract-chain --project projects/<tên>    # trích sẵn mọi khung chain/refprev → duyệt
+```
+Khung xấu (mờ, AI-tell, sai bối cảnh) → xoá file để trích lại hoặc tắt link_prev cảnh đó.
+`scene-clips` thấy file đã tồn tại thì DÙNG LẠI (không trích đè); chạy thẳng scene-clips không
+extract trước vẫn được nhưng sẽ in ⚠ "chưa qua duyệt".
 
-## Bước 3 · QC nhanh trước khi sang ráp
+**ref_prev (đồng bộ ánh sáng/layout khi CẮT ĐỔI GÓC cùng không gian, mode r2v):** frame cuối nét
+cảnh trước vào slot ref, **THAY location anchor**. 2 luật an toàn: danh tính LUÔN từ anchor gốc
+(chống trôi photocopy qua nhiều đời frame); chỉ chain/ref từ clip đã qua qc-clips (chống AI-tell
+lây lan). Khác link_prev: không ép liền mạch chuyển động, chỉ mượn không gian.
 
-Xem từng clip trong `04_clips/`: ☐ nhân vật khớp anchor ☐ chuyển động không giật/AI-tell
-☐ không chữ lạ trong hình ☐ đúng aspect ☐ cỡ cảnh đa dạng giữa các cảnh ☐ **không còn dấu watermark**.
+## Bước 3 · QC CONTINUITY trên clip thật (chốt chặn cuối trước ráp — máy trích, Claude soi, người quyết)
+
+```bash
+$PY $GEN qc-clips --project projects/<tên>    # trích frame đầu/giữa/cuối-nét mỗi clip + ledger.md
+```
+Rồi Claude **Read `qc_clips/ledger.md` + các frame PNG**, đối chiếu theo checklist trong ledger:
+mặt khớp anchor? trang phục khớp `state.wardrobe`? prop đúng desc registry? ánh sáng khớp
+time_of_day VÀ khớp cảnh liền kề cùng location? layout bối cảnh liền? AI-tell? → báo user **danh
+sách lệch per cảnh** (lệch gì, so với nguồn sự thật nào) — NGƯỜI quyết regen (mandate chất lượng:
+credit đổi lấy đồng bộ, regen không tiếc nhưng người bấm nút).
+Soi tay bổ sung mỗi clip: ☐ chuyển động không giật ☐ không chữ lạ trong hình ☐ đúng aspect
+☐ **không còn dấu watermark**.
 Clip hỏng → sửa prompt cảnh đó → `--scene N --regen`; hoặc CHỈ lỗi nhỏ → sửa bằng **v2v** (mục "Lệnh lẻ").
+Regen xong CHẠY LẠI qc-clips cho cảnh đó (regen là xúc xắc — có thể lệch kiểu khác).
 
 **Watermark Veo sót → delogo trước khi ráp (bài học ranh giới, vị trí CỐ ĐỊNH):** dù pipeline đã "xóa
 watermark", Veo/Flow vẫn để sót **ngôi sao 4 cánh (sparkle ✦)** góc dưới–phải. Vị trí ổn định trên khung

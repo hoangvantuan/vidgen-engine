@@ -32,6 +32,35 @@ góc · nền trơn · rõ mặt · style đồng bộ giữa mọi anchor**.
 - Ảnh anchor là chính. **Nhắc lại `characters[].desc` nguyên văn trong prompt mỗi cảnh** vẫn nên
   làm (hỗ trợ ảnh, giữ chi tiết trang phục/màu) — chỉ đừng KỲ VỌNG chữ thay được ảnh.
 
+## 3b · Đồng bộ TOÀN DIỆN — mọi thực thể lặp lại phải có nguồn sự thật + anchor
+
+Nguyên lý (grill 2026-07-12 "nhân vật đồng bộ nhưng chi tiết khác lệch"): hệ chỉ neo được cái
+CÓ HỢP ĐỒNG. Nhân vật chính có desc+anchor thì giữ được; nhân vật phụ/prop/ánh sáng là chữ tự do
+→ trôi. Bảng cách khoá theo loại thực thể:
+
+| Thực thể | Cách khoá | Ghi chú |
+|---|---|---|
+| Nhân vật (chính + PHỤ) | entry `characters[]` + anchor riêng 1-người/ảnh | mặt-rõ hoặc ≥2 cảnh = bắt buộc; đám đông → né mặt trong action |
+| Prop lặp ≥2 cảnh | `props[]` registry (desc chuẩn); hero-prop thêm ảnh anchor | prop gắn bối cảnh → BAKE vào ảnh location anchor |
+| Bối cảnh | location anchor ĐỦ 9 GÓC từ Grid 3×3 | góc thiếu anchor = Veo bịa layout |
+| Ánh sáng/thời điểm | `state.time_of_day/weather` + QC đo trôi | không khoá bằng ảnh |
+| Trạng thái nhân vật | `state.wardrobe/condition/held_props` | sổ liên tục — compiler chèn phần THỊ GIÁC |
+
+**Cảnh ĐÔNG thực thể (>3 ứng viên neo) — composite first-frame** (`flowgen compose-frame`):
+ghép DẦN từng thực thể vào 1 khung hình đầu qua nhiều lượt edit ảnh miễn phí (mỗi lượt ≤3 ref,
+tích lũy), duyệt khung, rồi i2v. Khung chứa tất cả trong pixel → né hẳn giới hạn 3 ref (nguồn:
+Vertex AI ghi ref workflow vốn cho 3 ảnh/MỘT chủ thể; cộng đồng hội tụ về composite-frame cho cảnh
+đông — CHƯA kiểm chứng thật trên engine này, clip thử dự án đầu PHẢI kèm 1 cảnh composite).
+KHÔNG mâu thuẫn luật "1 người/ảnh": luật đó áp cho ảnh làm REFERENCE danh tính (Veo không biết ai
+là ai → trộn mặt); composite làm FIRST FRAME là khung hình thật của cảnh, vai khác.
+
+**2 luật an toàn khi dùng ảnh/frame cảnh trước (link_prev / ref_prev):**
+1. **Chống trôi photocopy (generation loss):** cảnh N ref frame N-1, N+1 ref N… vài đời là mặt trôi
+   khỏi anchor gốc. Danh tính nhân vật LUÔN lấy từ anchor GỐC; frame cảnh trước chỉ mang vai
+   không gian/ánh sáng (ref_prev THAY location anchor, không thay character anchor).
+2. **Chống lây lỗi:** AI-tell của cảnh trước truyền sang cảnh sau — chỉ chain/ref từ clip đã qua
+   `flowgen qc-clips`.
+
 ## 4 · Image-first workflow (duyệt frame trước khi đốt credit video)
 
 Bằng chứng (verify 3-0): quy trình **"First and Last Frame"** — duyệt ảnh khung ĐẦU (và khung

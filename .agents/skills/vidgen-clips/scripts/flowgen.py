@@ -11,8 +11,12 @@ Subcommands:
                 (v2v = SỬA clip đã có, khỏi gen lại: --video-id <media_id> hoặc --video-file <local>)
   scene-images  Batch: gen ảnh khung đầu cho các cảnh chưa có ảnh (đọc project.json)
   scene-clips   Batch: I2V các cảnh đã duyệt ảnh, resume theo manifest, retry 1 lần
-  compile-prompts  Ghép scenes[].prompt từ field craft (hỗ trợ shots[] → timestamp coverage)
-  qc-storyboard    Đo luật ngữ pháp cảnh (nhịp/góc/transition/continuity) — warn-only
+  compose-frame Composite khung đầu cảnh ĐÔNG thực thể: ghép dần từng nhân vật/prop qua
+                nhiều lượt edit ảnh miễn phí (mỗi lượt ≤3 ref, tích lũy) — né giới hạn 3 ref
+  extract-chain Trích TRƯỚC khung chain/refprev cho người duyệt (scene-clips dùng lại)
+  qc-clips      QC continuity trên CLIP THẬT: frame đầu/giữa/cuối + ledger.md đối chiếu
+  compile-prompts  Ghép scenes[].prompt từ field craft (shots[] coverage + props/state)
+  qc-storyboard    Đo luật ngữ pháp cảnh + đồng bộ thực thể + state logic — warn-only
 
 Chạy bằng python có deps (websockets, cv2, numpy): ~/.venv/claude/bin/python
 Ví dụ:
@@ -101,9 +105,10 @@ def _pick_anchor(anchors: list, angle: str):
                 next((a for a in anchors if a.get("media_id")), None))
 
 
-def anchor_ids_for_scene(m: dict, scene: dict) -> list[str]:
-    """Gom media_id anchor: NHÂN VẬT (theo angle) + BỐI CẢNH (location) — tối đa 3 ref/prompt.
-    Nhân vật ưu tiên trước (giữ danh tính); location anchor thêm để khoá bối cảnh nếu còn chỗ."""
+def anchor_ids_for_scene(m: dict, scene: dict, include_location: bool = True) -> list[str]:
+    """Gom media_id anchor — tối đa 3 ref/prompt. Thứ tự ưu tiên slot (khán giả bắt lệch MẶT
+    nhạy nhất): NHÂN VẬT (theo angle, thứ tự khai = mặt-rõ trước) → HERO-PROP → BỐI CẢNH.
+    include_location=False khi cảnh có ref_prev (frame thật cảnh trước THAY location anchor)."""
     ids = []
     chars = {c["id"]: c for c in m.get("characters", [])}
     for cid in scene.get("characters", []):
@@ -113,14 +118,31 @@ def anchor_ids_for_scene(m: dict, scene: dict) -> list[str]:
         pick = _pick_anchor(c.get("anchors", []), scene.get("angle", "front"))
         if pick:
             ids.append(pick["media_id"])
+    props = {p["id"]: p for p in m.get("props", [])}
+    for pid in scene.get("props", []) or []:
+        p = props.get(pid)
+        mid = ((p or {}).get("anchor") or {}).get("media_id")
+        if mid and mid not in ids:
+            ids.append(mid)
     lid = scene.get("location")
-    if lid:
+    if lid and include_location:
         loc = next((l for l in m.get("locations", []) if l.get("id") == lid), None)
         if loc:
             pick = _pick_anchor(loc.get("anchors", []), scene.get("location_angle", ""))
             if pick and pick["media_id"] not in ids:
                 ids.append(pick["media_id"])
     return ids[:3]
+
+
+def count_anchor_candidates(m: dict, scene: dict) -> int:
+    """Đếm ứng viên CẦN neo của cảnh (nhân vật khai + hero-prop + location) — KHÔNG cắt 3.
+    Dùng cho QC: >3 = vượt ngân sách ref → gợi ý đường composite."""
+    n = len(scene.get("characters") or [])
+    props = {p["id"]: p for p in m.get("props", [])}
+    n += sum(1 for pid in scene.get("props") or [] if props.get(pid, {}).get("hero"))
+    if scene.get("location"):
+        n += 1
+    return n
 
 
 def extract_sharp_end_frame(video_path: str, out_png: str, window: int = 6) -> bool:
@@ -149,6 +171,22 @@ def extract_sharp_end_frame(video_path: str, out_png: str, window: int = 6) -> b
     Path(out_png).parent.mkdir(parents=True, exist_ok=True)
     cv2.imwrite(out_png, best)
     return True
+
+
+def _prev_frame(pdir: Path, prev: dict | None, sid, kind: str):
+    """Trích khung cuối NÉT của clip cảnh trước → 03_images/sceneNN_<kind>.png.
+    kind: 'chain' (link_prev — làm khung đầu) | 'refprev' (ref_prev — làm reference).
+    Trả Path hoặc None (thiếu clip trước)."""
+    if not prev:
+        return None
+    pf = prev.get("clip", {}).get("file") or f"04_clips/scene{prev['id']:02d}.mp4"
+    cand = pdir / pf
+    if not (cand.exists() and cand.stat().st_size > 0):
+        return None
+    out = pdir / "03_images" / f"scene{int(sid):02d}_{kind}.png"
+    if out.exists() and out.stat().st_size > 0:  # đã trích (extract-chain) → dùng bản đã duyệt
+        return out
+    return out if extract_sharp_end_frame(str(cand), str(out)) else None
 
 
 # ── prompt compiler (local, không tốn credit) ─────────────────────────────
@@ -199,6 +237,35 @@ _DIR = {"L2R": "moving left to right", "R2L": "moving right to left",
 def _recipe(emotion):
     e = str(emotion or "")
     return EMOTION_RECIPE.get(EMOTION_ALIAS.get(e, e))
+
+
+# Thứ tự thời điểm trong ngày (state.time_of_day) — QC đo "thời gian chạy lùi"
+TIME_ORDER = ["dawn", "morning", "noon", "afternoon", "dusk", "night"]
+_TIME_EN = {"dawn": "at dawn", "morning": "in the morning", "noon": "at midday",
+            "afternoon": "in the afternoon", "dusk": "at dusk", "night": "at night"}
+# lighting mâu thuẫn hiển nhiên với time_of_day (QC nhóm G — chỉ bắt cặp chắc chắn sai)
+_TIME_LIGHT_CLASH = {"night": {"golden_hour", "high_key"}, "noon": {"blue_hour", "golden_hour"},
+                     "morning": {"blue_hour"}}
+
+
+def effective_state(m: dict, s: dict) -> dict:
+    """State HIỆU DỤNG của cảnh: time_of_day/weather trống = KẾ THỪA cảnh gần nhất phía trước
+    có khai (sổ liên tục — điền 1 lần, các cảnh sau tự theo). Field per-nhân-vật không kế thừa
+    (trạng thái đổi theo diễn biến, kế thừa im lặng dễ sai hơn bỏ trống)."""
+    eff = dict(s.get("state") or {})
+    need = [k for k in ("time_of_day", "weather") if not (eff.get(k) or "").strip()]
+    if need:
+        scenes = m.get("scenes", [])
+        idx = next((i for i, x in enumerate(scenes) if x.get("id") == s.get("id")), -1)
+        for prev in reversed(scenes[:max(idx, 0)]):
+            st = prev.get("state") or {}
+            for k in list(need):
+                if (st.get(k) or "").strip():
+                    eff[k] = st[k]
+                    need.remove(k)
+            if not need:
+                break
+    return eff
 
 
 def _ts(sec) -> str:
@@ -265,9 +332,29 @@ def compile_scene_prompt(m: dict, s: dict) -> tuple[str | None, str]:
                 _MOVE.get(camera_move, camera_move), _LENS.get(lens, lens), _DIR.get(sdir, sdir)]
     cine = [x for x in cine if x]
 
-    # [Subject] — nhắc NGUYÊN VĂN desc nhân vật + thoại trong hình
+    # [Subject] — nhắc NGUYÊN VĂN desc nhân vật + state THỊ GIÁC (wardrobe/condition/held_props)
+    # + desc prop từ registry + thoại trong hình
     chars = {c["id"]: c for c in m.get("characters", [])}
-    subj = [chars[cid]["desc"] for cid in s.get("characters", []) if cid in chars and chars[cid].get("desc")]
+    props = {p["id"]: p for p in m.get("props", [])}
+    st = effective_state(m, s)
+    subj = []
+    for cid in s.get("characters", []):
+        if cid not in chars or not chars[cid].get("desc"):
+            continue
+        bits = [chars[cid]["desc"]]
+        for key in ("wardrobe", "condition"):
+            v = ((st.get(key) or {}).get(cid) or "").strip()
+            if v:
+                bits.append(v)
+        held = [props[pid]["desc"] for pid in (st.get("held_props") or {}).get(cid, [])
+                if pid in props and props[pid].get("desc")]
+        if held:
+            bits.append("holding " + ", ".join(held))
+        subj.append(", ".join(bits))
+    for pid in s.get("props", []) or []:  # prop trong khung mà không ai cầm
+        if pid in props and props[pid].get("desc") \
+                and pid not in {h for hs in (st.get("held_props") or {}).values() for h in hs}:
+            subj.append(props[pid]["desc"])
     for d in s.get("dialogue", []) or []:
         line = (d.get("line") or "").strip()
         if line:
@@ -280,8 +367,12 @@ def compile_scene_prompt(m: dict, s: dict) -> tuple[str | None, str]:
     if lid and lid in locs and locs[lid].get("desc"):
         context = locs[lid]["desc"]
 
-    # [Style & Ambiance] — style chung dự án + ánh sáng + atmosphere + keyword emotion + sfx
-    amb = [m.get("style", "").strip(), _LIGHT.get(lighting, lighting), _ATMOS.get(atmosphere, atmosphere),
+    # [Style & Ambiance] — style chung dự án + thời điểm/thời tiết (state) + ánh sáng + atmosphere
+    # + keyword emotion + sfx
+    amb = [m.get("style", "").strip(),
+           _TIME_EN.get((st.get("time_of_day") or "").strip(), (st.get("time_of_day") or "").strip()),
+           (st.get("weather") or "").strip() and f"{st['weather'].strip()} weather" or "",
+           _LIGHT.get(lighting, lighting), _ATMOS.get(atmosphere, atmosphere),
            rec.get("kw", "")]
     for fx in s.get("sfx", []) or []:
         if (fx or "").strip():
@@ -464,6 +555,91 @@ async def cmd_qc_storyboard(a):  # async khớp dispatch; thân thuần local
                                 f"(~{rate:.1f} chữ/s) — VO dài quá, clip sẽ bị kéo chậm lộ trôi nổi."))
             elif rate < 2:
                 I.append(("VO", f"cảnh {s['id']}: VO thưa (~{rate:.1f} chữ/s) — chủ đích lặng thì OK."))
+
+    # F · ĐỒNG BỘ THỰC THỂ — mọi thứ lặp lại phải có nguồn sự thật + anchor; vượt 3 ref → composite
+    char_reg = {c["id"]: c for c in m.get("characters", [])}
+    prop_reg = {p["id"]: p for p in m.get("props", [])}
+    for s in scenes:
+        for cid in s.get("characters") or []:
+            if cid not in char_reg:
+                W.append(("THỰC THỂ", f"cảnh {s['id']}: nhân vật '{cid}' KHÔNG có trong characters[] "
+                                      "— mỗi generation Veo sẽ tự bịa một người khác."))
+        for pid in s.get("props") or []:
+            if pid not in prop_reg:
+                W.append(("THỰC THỂ", f"cảnh {s['id']}: prop '{pid}' không có trong props[] registry."))
+        n = count_anchor_candidates(m, s)
+        if n > 3 and not s.get("composite"):
+            W.append(("THỰC THỂ", f"cảnh {s['id']}: {n} ứng viên neo > ngân sách 3 ref — bật "
+                                  "composite:true (compose-frame) hoặc bớt thực thể/né mặt."))
+        elif s.get("composite") and n <= 3:
+            I.append(("THỰC THỂ", f"cảnh {s['id']}: composite bật nhưng chỉ {n} ứng viên neo — "
+                                  "đường ref thường là đủ."))
+        if s.get("ref_prev") and s.get("mode", "i2v") != "r2v":
+            W.append(("THỰC THỂ", f"cảnh {s['id']}: ref_prev chỉ có nghĩa với mode r2v "
+                                  f"(đang '{s.get('mode', 'i2v')}'); liền mạch thì dùng link_prev."))
+        if s.get("ref_prev") and s.get("link_prev"):
+            W.append(("THỰC THỂ", f"cảnh {s['id']}: ref_prev + link_prev cùng lúc — chọn 1 "
+                                  "(liền mạch = link_prev; đổi góc cùng không gian = ref_prev)."))
+        # nhân vật MỒ CÔI: danh từ người trong action/prompt mà không khai characters[]
+        import re
+        text = (s.get("action") or "") + " " + ((s.get("prompt") or "") if s.get("prompt_override") else "")
+        for sh in s.get("shots") or []:
+            text += " " + (sh.get("action") or "")
+        crowd = sorted(set(re.findall(r"\b(crowd|villagers|people|bystanders)\b", text, re.I)))
+        humans = sorted(set(w.lower() for w in re.findall(
+            r"\b(?:mother|father|grandma|grandmother|grandpa|grandfather|woman|man|boy|girl|child|children|kids|baby|farmer|soldier|merchant|neighbor)\b",
+            text, re.I)))
+        # danh từ đã được COVER bởi desc nhân vật khai trong cảnh (vd "girl" nằm trong desc bé) → không mồ côi
+        covered = " ".join(char_reg.get(cid, {}).get("desc", "")
+                           for cid in s.get("characters") or []).lower()
+        humans = [w for w in humans if w not in covered]
+        if humans:
+            declared = ", ".join(s.get("characters") or []) or "KHÔNG AI"
+            W.append(("THỰC THỂ", f"cảnh {s['id']}: action nhắc người ({', '.join(humans)}) nhưng "
+                                  f"characters chỉ khai [{declared}] — nhân vật mồ côi sẽ đổi mặt "
+                                  "mỗi generation; thêm entry+anchor hoặc viết né mặt."))
+        if crowd:
+            I.append(("THỰC THỂ", f"cảnh {s['id']}: đám đông ({', '.join(crowd)}) — không anchor được, "
+                                  "viết né mặt: turned away / silhouette / out of focus."))
+        if s.get("props") and not s.get("composite"):
+            heroes = [pid for pid in s["props"] if prop_reg.get(pid, {}).get("hero")]
+            no_anchor = [pid for pid in heroes if not (prop_reg[pid].get("anchor") or {}).get("file")]
+            if no_anchor:
+                W.append(("THỰC THỂ", f"cảnh {s['id']}: hero-prop {no_anchor} chưa có ảnh anchor "
+                                      "(T2I miễn phí — gen ở stage character)."))
+
+    # G · STATE/LOGIC XUYÊN CẢNH — chỉ kích hoạt khi dự án có dùng state (backward-compat)
+    if any(s.get("state") for s in scenes):
+        prev_t = None
+        for s in scenes:
+            st = effective_state(m, s)
+            t = (st.get("time_of_day") or "").strip()
+            if t and t not in TIME_ORDER:
+                W.append(("STATE", f"cảnh {s['id']}: time_of_day '{t}' lạ — dùng {'/'.join(TIME_ORDER)}."))
+            elif t:
+                if prev_t and TIME_ORDER.index(t) < TIME_ORDER.index(prev_t):
+                    W.append(("STATE", f"cảnh {s['id']}: thời gian chạy LÙI ({prev_t} → {t}) — "
+                                       "qua ngày mới/flashback thì ghi chú kichban.md, không thì sửa."))
+                prev_t = t
+                light = (s.get("lighting") or "").strip() or (_recipe(s.get("emotion", "")) or {}).get("lighting", "")
+                if light in _TIME_LIGHT_CLASH.get(t, ()):
+                    W.append(("STATE", f"cảnh {s['id']}: lighting '{light}' mâu thuẫn time_of_day "
+                                       f"'{t}' — ánh sáng sẽ trôi giữa các cảnh."))
+            sst = s.get("state") or {}
+            declared = set(s.get("characters") or [])
+            for key in ("wardrobe", "condition", "held_props"):
+                for cid in (sst.get(key) or {}):
+                    if cid not in declared:
+                        W.append(("STATE", f"cảnh {s['id']}: state.{key} khai '{cid}' nhưng nhân vật "
+                                           "không có trong cảnh — sổ liên tục lệch."))
+            for cid, pids in (sst.get("held_props") or {}).items():
+                for pid in pids:
+                    if pid not in prop_reg:
+                        W.append(("STATE", f"cảnh {s['id']}: held_props trỏ prop '{pid}' không có registry."))
+            if (s.get("characters") and not sst
+                    and any(x.get("state") for x in scenes[:scenes.index(s)])):
+                I.append(("STATE", f"cảnh {s['id']}: sổ liên tục ĐỨT (cảnh trước có state, cảnh này "
+                                   "trống) — time_of_day/weather vẫn kế thừa, wardrobe/condition thì không."))
 
     for tag, items in (("⚠", W), ("ℹ", I)):
         for group, msg in items:
@@ -651,23 +827,36 @@ async def cmd_scene_clips(a):
             if mode == "fl":
                 kwargs["end_id"] = s.get("end_image", {}).get("media_id")
             if mode == "r2v":
-                kwargs["ref_ids"] = anchor_ids_for_scene(m, s)
+                # ── REF_PREV: frame cuối nét cảnh trước làm 1 REF, THAY location anchor ──
+                # (danh tính vẫn từ anchor GỐC — chống trôi photocopy; frame mang vai không gian)
+                if s.get("ref_prev"):
+                    refs = anchor_ids_for_scene(m, s, include_location=False)
+                    fp = _prev_frame(pdir, prev_of.get(s["id"]), s["id"], "refprev")
+                    fid = await upload_image(bridge, str(fp), kwargs["project_id"]) if fp else None
+                    if fid:
+                        refs = (refs + [fid])[:3]
+                        print(f"— Cảnh {s['id']}: ref_prev — frame cảnh trước thay location anchor.")
+                    else:
+                        refs = anchor_ids_for_scene(m, s)  # fallback: đủ bộ anchor như thường
+                        print(f"— Cảnh {s['id']}: ref_prev fail (thiếu clip trước) → dùng anchor thường.")
+                    kwargs["ref_ids"] = refs
+                else:
+                    kwargs["ref_ids"] = anchor_ids_for_scene(m, s)
             # ── FRAME-CHAINING: khung cuối NÉT của cảnh trước → khung đầu cảnh này ──
             if s.get("link_prev") and mode in ("i2v", "fl"):
-                prev = prev_of.get(s["id"])
-                prev_clip = None
-                if prev:
-                    pf = prev.get("clip", {}).get("file") or f"04_clips/scene{prev['id']:02d}.mp4"
-                    cand = pdir / pf
-                    if cand.exists() and cand.stat().st_size > 0:
-                        prev_clip = cand
-                cf = None
-                if prev_clip:
-                    frame_png = pdir / "03_images" / f"scene{s['id']:02d}_chain.png"
-                    if extract_sharp_end_frame(str(prev_clip), str(frame_png)):
-                        cf = await upload_image(bridge, str(frame_png), kwargs["project_id"])
+                frame_png = pdir / "03_images" / f"scene{s['id']:02d}_chain.png"
+                if frame_png.exists() and frame_png.stat().st_size > 0:
+                    # đã trích sẵn bằng extract-chain (LUẬT: người duyệt khung chain trước khi đốt credit)
+                    cf = await upload_image(bridge, str(frame_png), kwargs["project_id"])
+                else:
+                    fp = _prev_frame(pdir, prev_of.get(s["id"]), s["id"], "chain")
+                    cf = await upload_image(bridge, str(fp), kwargs["project_id"]) if fp else None
+                    if cf:
+                        print(f"  ⚠ khung chain trích tự động CHƯA qua duyệt ({frame_png.name}) — "
+                              "lần sau chạy 'extract-chain' + duyệt trước khi scene-clips.")
                 if cf:
                     kwargs["image_id"] = cf
+                    prev = prev_of.get(s["id"])
                     print(f"— Cảnh {s['id']}: ↪ frame-chain từ khung cuối nét cảnh "
                           f"{prev['id'] if prev else '?'}")
                 elif not kwargs.get("image_id"):
@@ -692,6 +881,216 @@ async def cmd_scene_clips(a):
         print(f"Hoàn tất. Failed: {failed or 'không'}")
     finally:
         await bridge.close()
+
+
+async def cmd_extract_chain(a):
+    """Trích TRƯỚC khung chain/refprev để NGƯỜI DUYỆT trước khi scene-clips đốt credit
+    (luật: mọi khung đầu phải qua mắt người). scene-clips thấy file đã tồn tại → dùng lại."""
+    pdir = Path(a.project)
+    m = load_manifest(pdir)
+    prev_of = {m["scenes"][i]["id"]: (m["scenes"][i - 1] if i > 0 else None)
+               for i in range(len(m["scenes"]))}
+    done, miss = [], []
+    for s in m["scenes"]:
+        if a.scene and s["id"] not in a.scene:
+            continue
+        for flag, kind in (("link_prev", "chain"), ("ref_prev", "refprev")):
+            if not s.get(flag):
+                continue
+            out = pdir / "03_images" / f"scene{s['id']:02d}_{kind}.png"
+            if out.exists() and not a.force:
+                done.append((s["id"], kind, out, "đã có"))
+                continue
+            if out.exists():
+                out.unlink()
+            fp = _prev_frame(pdir, prev_of.get(s["id"]), s["id"], kind)
+            (done if fp else miss).append((s["id"], kind, out, "trích mới") if fp
+                                          else (s["id"], kind, out, "THIẾU clip cảnh trước"))
+    for sid, kind, out, note in done:
+        print(f"— Cảnh {sid} [{kind}]: {out.relative_to(pdir)} ({note})")
+    for sid, kind, _, note in miss:
+        print(f"✗ Cảnh {sid} [{kind}]: {note} — gen clip cảnh trước rồi chạy lại.")
+    if done:
+        print("\nDUYỆT các khung trên (mở ảnh xem: nét? đúng bối cảnh? không AI-tell?) "
+              "rồi mới scene-clips. Khung xấu → xoá file để scene-clips trích lại, "
+              "hoặc tắt link_prev/ref_prev cảnh đó.")
+
+
+def _subject_bits(m: dict, s: dict, cid: str) -> str:
+    """Desc nhân vật + state thị giác (wardrobe/condition/held_props) — dùng chung
+    compile & compose để 2 đường tả MỘT KIỂU (nguồn sự thật duy nhất)."""
+    chars = {c["id"]: c for c in m.get("characters", [])}
+    props = {p["id"]: p for p in m.get("props", [])}
+    st = effective_state(m, s)
+    if cid not in chars or not chars[cid].get("desc"):
+        return ""
+    bits = [chars[cid]["desc"]]
+    for key in ("wardrobe", "condition"):
+        v = ((st.get(key) or {}).get(cid) or "").strip()
+        if v:
+            bits.append(v)
+    held = [props[pid]["desc"] for pid in (st.get("held_props") or {}).get(cid, [])
+            if pid in props and props[pid].get("desc")]
+    if held:
+        bits.append("holding " + ", ".join(held))
+    return ", ".join(bits)
+
+
+async def cmd_compose_frame(a):
+    """COMPOSITE FIRST-FRAME cho cảnh ĐÔNG thực thể (>3 ứng viên neo — vượt ngân sách ref):
+    ghép DẦN từng thực thể vào 1 khung hình đầu bằng T2I/I2I nhiều lượt (MIỄN PHÍ credit).
+    Mỗi lượt ≤3 ref (ảnh lượt trước + anchor thực thể mới) nhưng TÍCH LŨY → khung cuối chứa
+    TẤT CẢ trong pixel, né hẳn giới hạn 3 ref của 1 generation. Duyệt khung rồi mới i2v.
+    Lưu từng lượt sceneNN_comp_K.png để lần lại khi lệch; kết quả cuối ghi vào scene.image."""
+    pdir = Path(a.project)
+    m = load_manifest(pdir)
+    s = next((x for x in m["scenes"] if x["id"] == a.scene), None)
+    if not s:
+        raise SystemExit(f"Không thấy cảnh {a.scene}.")
+    chars = {c["id"]: c for c in m.get("characters", [])}
+    props = {p["id"]: p for p in m.get("props", [])}
+    st = effective_state(m, s)
+
+    # Kế hoạch lượt: base = location + nhân vật ĐẦU (quan trọng nhất, đứng đầu list =
+    # ưu tiên slot); mỗi lượt sau THÊM 1 thực thể (nhân vật kế / hero-prop chưa ai cầm).
+    cids = [cid for cid in s.get("characters", []) if cid in chars]
+    if not cids:
+        raise SystemExit("Cảnh không có nhân vật hợp lệ — composite chỉ đáng khi đông thực thể.")
+    add_props = [pid for pid in s.get("props") or []
+                 if props.get(pid, {}).get("hero") and (props[pid].get("anchor") or {}).get("media_id")
+                 and pid not in {h for hs in (st.get("held_props") or {}).values() for h in hs}]
+
+    loc = next((l for l in m.get("locations", []) if l.get("id") == s.get("location")), None)
+    loc_pick = _pick_anchor((loc or {}).get("anchors", []), s.get("location_angle", "")) if loc else None
+    style_bits = [x for x in (m.get("style", "").strip(),
+                              _TIME_EN.get((st.get("time_of_day") or "").strip(), ""),
+                              (st.get("weather") or "").strip()) if x]
+    rec = _recipe(s.get("emotion", "")) or {}
+    shot = _SHOT.get((s.get("shot_size") or rec.get("shot_size", "")).strip(), "") or "wide shot"
+    angle = _ANGLE.get((s.get("camera_angle") or rec.get("camera_angle", "")).strip(), "")
+
+    bridge = await open_bridge()
+    try:
+        pid_flow = m.get("flow_project_id") or DEFAULT_PROJECT
+        # ── Lượt 1 (base): bối cảnh + nhân vật đầu ──
+        first = cids[0]
+        base_prompt = ". ".join(x for x in (
+            ", ".join(b for b in (shot, angle) if b),
+            _subject_bits(m, s, first),
+            (loc or {}).get("desc", ""),
+            (s.get("action") or "").strip(),
+            ", ".join(style_bits)) if x) + NO_TEXT
+        refs = [x["media_id"] for x in (
+            _pick_anchor(chars[first].get("anchors", []), s.get("angle", "front")), loc_pick) if x]
+        steps = [(f"base ({first} + bối cảnh)", base_prompt, refs)]
+        for k, ent in enumerate([("char", c) for c in cids[1:]] + [("prop", p) for p in add_props], 2):
+            kind, eid = ent
+            desc = _subject_bits(m, s, eid) if kind == "char" else props[eid]["desc"]
+            anchor = _pick_anchor(chars[eid].get("anchors", []), s.get("angle", "front")) \
+                if kind == "char" else props[eid].get("anchor")
+            add_prompt = (f"Add {desc} into the scene, placed naturally to fit: "
+                          f"{(s.get('action') or 'the scene').strip()}. Keep every existing person, "
+                          f"the layout, lighting and style EXACTLY unchanged" + NO_TEXT)
+            steps.append((f"thêm {eid}", add_prompt,
+                          [x for x in [None, (anchor or {}).get("media_id")] if x]))  # [0] điền sau = ảnh lượt trước
+
+        last_mid, last_file = None, None
+        for i, (label, prompt, refs) in enumerate(steps, 1):
+            if i > 1:
+                refs = [last_mid] + refs  # ảnh lượt trước đứng ĐẦU: nền giữ nguyên, anchor mới thêm vào
+            out = pdir / "03_images" / f"scene{s['id']:02d}_comp_{i}.png"
+            print(f"— Lượt {i}/{len(steps)}: {label} (refs={len(refs)})")
+            results = await generate_image(bridge, prompt, m.get("aspect", "portrait"),
+                                           pid_flow, count=1, ref_media_ids=refs or None)
+            if not results:
+                raise SystemExit(f"  ✗ lượt {i} gen lỗi — các lượt trước còn trong 03_images/, chạy lại.")
+            out.parent.mkdir(parents=True, exist_ok=True)
+            await download_image(bridge, results[0]["image_url"], str(out))
+            last_mid, last_file = results[0]["media_id"], out
+        new_img = {"file": str(last_file.relative_to(pdir)), "media_id": last_mid, "approved": False}
+        patch_scene(pdir, s["id"], "image", new_img)
+        print(f"\nXong {len(steps)} lượt → {last_file.relative_to(pdir)} (đã ghi scene.image, approved=false)."
+              f"\nDUYỆT khung: đủ {len(cids)} nhân vật + {len(add_props)} prop? mặt khớp anchor? "
+              f"Lệch → xem lại từng lượt comp_K.png tìm lượt hỏng, sửa prompt/anchor rồi chạy lại.")
+    finally:
+        await bridge.close()
+
+
+async def cmd_qc_clips(a):  # async khớp dispatch; thân local (cv2), KHÔNG cần bridge
+    """QC CONTINUITY trên CLIP THẬT (chốt chặn cuối trước assemble): trích frame đầu/giữa/cuối-nét
+    mỗi clip → qc_clips/ + ledger.md (sổ liên tục máy-đọc-được). Claude vision đối chiếu frame với
+    ANCHOR (mặt/trang phục/prop) và với CẢNH LIỀN KỀ (ánh sáng/layout/state) theo ledger → báo lệch
+    per cảnh → NGƯỜI quyết regen (mandate chất lượng: credit đổi lấy đồng bộ)."""
+    import cv2
+    pdir = Path(a.project)
+    m = load_manifest(pdir)
+    qdir = pdir / "qc_clips"
+    qdir.mkdir(exist_ok=True)
+    chars = {c["id"]: c for c in m.get("characters", [])}
+    props = {p["id"]: p for p in m.get("props", [])}
+    rows, skipped = [], []
+    for s in m.get("scenes", []):
+        if a.scene and s["id"] not in a.scene:
+            continue
+        cf = s.get("clip", {}).get("file") or f"04_clips/scene{s['id']:02d}.mp4"
+        clip = pdir / cf
+        if not (clip.exists() and clip.stat().st_size > 0):
+            skipped.append(s["id"])
+            continue
+        cap = cv2.VideoCapture(str(clip))
+        total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        got = {}
+        for name, idx in (("start", min(2, max(total - 1, 0))), ("mid", total // 2)):
+            cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+            ok, frame = cap.read()
+            if ok:
+                p = qdir / f"scene{s['id']:02d}_{name}.png"
+                cv2.imwrite(str(p), frame)
+                got[name] = p.name
+        cap.release()
+        endp = qdir / f"scene{s['id']:02d}_end.png"
+        if extract_sharp_end_frame(str(clip), str(endp)):
+            got["end"] = endp.name
+        rows.append((s, got))
+
+    lines = ["# Ledger QC clip — đối chiếu frame thật với sổ liên tục", "",
+             "Checklist per cảnh (Claude vision đọc frame + mục cảnh tương ứng):",
+             "1. MẶT/DÁNG mỗi nhân vật khớp ảnh anchor? (trộn mặt/đổi người = regen)",
+             "2. TRANG PHỤC/THỂ TRẠNG khớp state.wardrobe/condition?",
+             "3. PROP đúng desc registry? (hình dạng/màu đổi = lệch)",
+             "4. ÁNH SÁNG khớp time_of_day/lighting VÀ khớp cảnh liền kề cùng location?",
+             "5. BỐI CẢNH: layout nhà/cây/đồ đạc khớp location anchor + cảnh liền kề?",
+             "6. AI-TELL: tay/ngón, morphing, chữ tự bịa, watermark?", ""]
+    prev = None
+    for s, got in rows:
+        st = effective_state(m, s)
+        lines.append(f"## Cảnh {s['id']} — location={s.get('location') or '—'}, "
+                     f"time={st.get('time_of_day') or '—'}, weather={st.get('weather') or '—'}")
+        lines.append("- Frames: " + " · ".join(f"qc_clips/{v}" for v in got.values()))
+        for cid in s.get("characters") or []:
+            c = chars.get(cid) or {}
+            anchor_files = ", ".join(x.get("file", "") for x in c.get("anchors", []) if x.get("file"))
+            extra = [((st.get(k) or {}).get(cid) or "").strip() for k in ("wardrobe", "condition")]
+            lines.append(f"- {cid}: anchor [{anchor_files or 'THIẾU'}] — desc: {c.get('desc', '?')}"
+                         + ("; state: " + "; ".join(x for x in extra if x) if any(extra) else ""))
+            held = (st.get("held_props") or {}).get(cid) or []
+            if held:
+                lines.append(f"  cầm: " + "; ".join(f"{p} ({props.get(p, {}).get('desc', '?')})" for p in held))
+        for pid in s.get("props") or []:
+            lines.append(f"- prop {pid}: {props.get(pid, {}).get('desc', 'KHÔNG có registry')}"
+                         + (f" — anchor {props[pid]['anchor'].get('file')}"
+                            if props.get(pid, {}).get("anchor") else ""))
+        if prev is not None and prev.get("location") and prev.get("location") == s.get("location"):
+            lines.append(f"- SO VỚI cảnh {prev['id']} (cùng location): ánh sáng, layout, "
+                         "trang phục phải LIỀN — mở qc_clips/scene%02d_end.png cạnh scene%02d_start.png."
+                         % (prev["id"], s["id"]))
+        lines.append("")
+        prev = s
+    (qdir / "ledger.md").write_text("\n".join(lines), encoding="utf-8")
+    print(f"Trích {len(rows)} cảnh × 3 frame → {qdir.relative_to(pdir)}/ + ledger.md"
+          + (f" (bỏ qua thiếu clip: {skipped})" if skipped else ""))
+    print("Bước sau: Claude Read ledger.md + các frame, đối chiếu checklist, báo lệch per cảnh — "
+          "NGƯỜI quyết regen (scene-clips --regen --scene N).")
 
 
 # ── main ──────────────────────────────────────────────────────────────────
@@ -754,6 +1153,28 @@ def main():
     p.add_argument("--regen", action="store_true", help="gen lại cả cảnh đã done")
     p.add_argument("--force", action="store_true", help="bỏ qua kiểm tra gate character_lock")
     p.set_defaults(fn=cmd_scene_clips)
+
+    p = sub.add_parser("compose-frame",
+                       help="COMPOSITE khung đầu cảnh ĐÔNG thực thể: ghép dần từng nhân vật/prop "
+                            "bằng edit ảnh nhiều lượt (miễn phí) — né giới hạn 3 ref")
+    p.add_argument("--project", required=True)
+    p.add_argument("--scene", type=int, required=True, help="1 cảnh mỗi lần (duyệt từng khung)")
+    p.set_defaults(fn=cmd_compose_frame)
+
+    p = sub.add_parser("extract-chain",
+                       help="trích TRƯỚC khung chain/refprev từ clip cảnh trước để NGƯỜI duyệt "
+                            "(scene-clips dùng lại file đã duyệt, không trích lại)")
+    p.add_argument("--project", required=True)
+    p.add_argument("--scene", type=int, nargs="*", help="chỉ các cảnh này")
+    p.add_argument("--force", action="store_true", help="trích lại đè file cũ")
+    p.set_defaults(fn=cmd_extract_chain)
+
+    p = sub.add_parser("qc-clips",
+                       help="QC continuity trên CLIP THẬT: trích frame đầu/giữa/cuối + ledger.md "
+                            "để đối chiếu anchor & cảnh liền kề trước khi assemble (local)")
+    p.add_argument("--project", required=True)
+    p.add_argument("--scene", type=int, nargs="*", help="chỉ các cảnh này")
+    p.set_defaults(fn=cmd_qc_clips)
 
     a = ap.parse_args()
     asyncio.run(a.fn(a))

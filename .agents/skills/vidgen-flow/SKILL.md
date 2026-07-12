@@ -64,11 +64,15 @@ cảm nhất, tương tác phức tạp nhất), KHÔNG phải cảnh trung bìn
 nhau, ảnh gen được ≠ clip gen được (xem `vidgen-character` Bước 3).
 **🚦 GATE 2:** trình sheet + anchors + clip thử (kiểm khớp anchor, không AI-tell). User gật → `gates.character_lock=true`.
 
-## STEP 3 · Gen clip — skill `vidgen-clips` (tự chạy, không gate)
+## STEP 3 · Gen clip — skill `vidgen-clips` (tự chạy + vòng QC continuity)
 
-`scene-images` (miễn phí) → user duyệt ảnh theo lô → **báo số clip sẽ gen ≈ số credit** →
-`scene-clips` (resume theo manifest, retry 1, failed không chặn batch). QC nhanh từng clip.
+`scene-images` / `compose-frame` (cảnh `composite:true`, miễn phí) → user duyệt KHUNG ĐẦU theo lô
+(LUẬT: mọi khung, kể cả khung chain `extract-chain`, qua mắt người trước khi đốt credit) → **báo số
+clip sẽ gen ≈ số credit** → `scene-clips` (resume theo manifest, retry 1, failed không chặn batch).
 Đây là điểm tiết kiệm nhất: mọi chỉnh sửa hình ảnh làm ở tầng ẢNH, đừng ở tầng VIDEO.
+**Sau batch — vòng `qc-clips` (chốt chặn cuối trước ráp):** máy trích frame + ledger → Claude
+vision đối chiếu anchor/state/cảnh liền kề → báo danh sách lệch → user quyết regen → regen xong
+qc-clips LẠI cảnh đó. Chỉ sang STEP 4 khi danh sách lệch = rỗng hoặc user chấp nhận phần còn lại.
 Clip fail `MEDIA_GENERATION_STATUS_FAILED` = Veo chặn nội dung (hay gặp: trẻ em + đau khổ) → **mềm prompt**
 (bỏ `gaunt/frail/starving`, diễn khổ qua bối cảnh/trang phục) rồi gen lại; vẫn chặn → fallback Ken Burns từ
 ảnh (assemble tự làm). Bảng từ-trigger: `vidgen-clips/references/veo-prompt-craft.md`.

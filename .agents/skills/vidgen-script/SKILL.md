@@ -79,8 +79,22 @@ Tạo `projects/<tên>/project.json` theo schema — **đọc `references/projec
 cơ chế compiler; scene-grammar: ngữ pháp cảnh — coverage, tiến trình cỡ cảnh, 5 luật continuity,
 nhịp dựng, quy tắc kích hoạt link_prev/match_cut/re-establish cho TỪNG cặp cảnh liền kề).
 Điền: `characters` (desc chi tiết; **`voice_id` nếu nhân vật có thoại** — xem dưới), `locations`
-(nếu khoá bối cảnh), `style` chung, scenes. Mặc định `mode: "i2v"` (ảnh duyệt trước, rẻ) — cảnh
-thuần bối cảnh không nhân vật thì `t2v`.
+(nếu khoá bối cảnh), `props[]` registry, `style` chung, scenes. Mặc định `mode: "i2v"` (ảnh duyệt
+trước, rẻ) — cảnh thuần bối cảnh không nhân vật thì `t2v`.
+
+**Luật đồng bộ thực thể (mandate chất lượng — nguồn lệch lớn nhất đã đo được):**
+- **MỌI nhân vật mặt-rõ hoặc lặp ≥2 cảnh → entry `characters[]`** (kể cả vai phụ: mẹ, bà cụ, em
+  bé). Không entry = mỗi generation một khuôn mặt khác. Đám đông/người nền → action né mặt
+  (turned away / silhouette / out of focus), KHÔNG entry.
+- **Đạo cụ lặp ≥2 cảnh → entry `props[]`** (desc chuẩn duy nhất; hero-prop đánh `hero:true` để
+  stage 2 gen anchor). Cảnh dùng prop → khai `scenes[].props: [id]`.
+- **Cảnh ĐÔNG (>3 ứng viên neo: nhân vật + hero-prop + location) → `composite: true`** — đi đường
+  compose-frame (ghép dần từng thực thể vào khung đầu, không vướng giới hạn 3 ref). QC tự đếm và WARN.
+- **`state{}` per cảnh — SỔ LIÊN TỤC (script supervisor):** `time_of_day`/`weather` (trống = kế
+  thừa cảnh trước), `wardrobe`/`condition` per nhân vật (chỉ cái NHÌN THẤY: quần áo bẩn dần, mặt
+  hốc hác dần), `held_props` (ai cầm gì), `position` (metadata cho QC soi teleport). Claude điền
+  khi dựng storyboard — trạng thái phải TIẾN TRIỂN hợp lý một chiều theo mạch (đói dần, không hồi
+  phục vô cớ); QC đo thời-gian-chạy-lùi và lighting mâu thuẫn time_of_day.
 
 **Đạo cụ BIẾN THIÊN không bake vào `desc` (bài học ranh giới anchor↔cốt truyện):** `characters[].desc`
 (và anchor) chỉ giữ cái **BẤT BIẾN** — mặt, tóc, trang phục khoá. Vật thể/đạo cụ **thay đổi theo mạch**
@@ -115,8 +129,10 @@ compiler ghép. Mỗi cảnh điền:
   nhắc kể bằng 2-3 cú cắt xen TRONG CÙNG 1 lần gen (timestamp prompting, 0 credit thêm): điền
   `shots[]` (mỗi cú: `from/to/shot_size/camera_angle/action`, 2-4s/cú, có ≥1 cú cận/insert/reaction).
   Cảnh ngấm cần cú dài thì ĐỪNG dùng. Đi qua **bảng kích hoạt continuity** (`scene-grammar.md §7`)
-  cho TỪNG cặp cảnh liền kề: liên tục thời-không → `link_prev`; cùng sự kiện đổi cỡ → `match_cut_with`;
-  vào location mới → mở wide/establishing (re-establish).
+  cho TỪNG cặp cảnh liền kề — giờ là BẮT BUỘC điền khi khớp bảng, không phải gợi ý (bài học 0/15
+  dùng dù field có sẵn): liên tục thời-không → `link_prev`; **cắt đổi góc CÙNG không gian (mode
+  r2v) → `ref_prev`** (frame cảnh trước thay location anchor — giữ ánh sáng/layout);
+  cùng sự kiện đổi cỡ → `match_cut_with`; vào location mới → mở wide/establishing (re-establish).
 
 Rồi **ghép prompt tự động**:
 ```bash
@@ -147,6 +163,11 @@ cut, mỗi fade/dissolve nêu được nghĩa ☐ **beat đắt (hook/turn/payof
 hoặc lý do 1 cú ☐ **continuity**: screen_direction nhất quán mạch, cảnh cùng bối cảnh trỏ đúng
 `location`, vào location mới có re-establish, cặp cảnh liền kề đã qua bảng kích hoạt (`scene-grammar.md §7`)
 ☐ không yêu cầu chữ trong hình ☐ không em-dash ☐ tổng thời lượng khớp brief ☐ **1 CTA** duy nhất.
+**Đồng bộ thực thể + sổ liên tục (nhóm THỰC THỂ/STATE của QC):** ☐ không nhân vật mồ côi (mọi ⚠
+"action nhắc người" đã xử: thêm entry hoặc né mặt) ☐ prop lặp có registry, hero-prop đánh dấu
+☐ cảnh >3 ứng viên neo có `composite:true` ☐ state điền đủ các cảnh có nhân vật, trạng thái tiến
+triển 1 chiều hợp mạch (đói dần/bẩn dần — soi NGỮ NGHĨA bằng mắt, máy chỉ đo time/lighting)
+☐ không teleport: cặp cảnh liền kề đổi location xa phải có ellipsis hợp lý trong VO/action.
 **Craft LỜI (đọc-to, theo `vo-writing-craft.md`):** ☐ câu VO đầu không dạo đầu (niên đại/tên/chào)
 ☐ có ≥1 open loop cấy sớm–đóng ở payoff ☐ đọc to 3 cảnh liền không đều nhịp (có câu cụt để đấm)
 ☐ không tính từ cảm xúc tổng kết thay được bằng chi tiết ☐ có ≥1 cảnh lặng chủ động sau beat nặng

@@ -57,6 +57,11 @@ Manifest là NGUỒN SỰ THẬT duy nhất về trạng thái dự án. Script 
   // Luật gen: story_lock=false → CẤM sang Bước 3 (dựng storyboard/compile). script_lock=false → CẤM gen.
 
   "characters": [
+    // LUẬT ĐỒNG BỘ (không phân biệt chính/phụ): MỌI nhân vật xuất hiện MẶT-RÕ (medium trở gần)
+    // hoặc lặp ≥2 cảnh PHẢI có entry + anchor riêng (1 người/ảnh — sheet chung nạp vào Flow là
+    // Veo TRỘN MẶT, xem consistency-and-ai-tells.md §1). Đám đông/người nền → KHÔNG entry,
+    // viết action né mặt: "turned away", "silhouette", "out of focus". QC bắt nhân vật mồ côi
+    // (danh từ người trong action mà không khai characters) — flowgen qc-storyboard nhóm F.
     {
       "id": "be_na",
       "desc": "bé gái 5 tuổi, tóc hai bím, váy vàng, mắt to",   // NHẮC LẠI trong prompt mỗi cảnh
@@ -80,10 +85,28 @@ Manifest là NGUỒN SỰ THẬT duy nhất về trạng thái dự án. Script 
       "id": "cafe",
       "desc": "quán cà phê gỗ ấm, cửa sổ lớn phía đông, ánh nắng sớm, cây xanh",  // NHẮC LẠI trong prompt
       "sheet": "02_locations/cafe_grid.png",   // Grid 3×3 nhiều góc trong 1 render — cho NGƯỜI duyệt (xem mục dưới)
-      "anchors": [                             // anchor bối cảnh — cho MÁY: nền địa điểm, KHÔNG người, style chung
+      "anchors": [                             // anchor bối cảnh — cho MÁY: nền địa điểm, KHÔNG người, style chung.
+                                               // QUY ƯỚC ĐỦ 9 GÓC từ Grid 3×3 ngay khi khoá bối cảnh (wide/corner/
+                                               // reverse/left/right/high/low/detail/entrance — đặt angle theo grid);
+                                               // cảnh dùng góc thiếu anchor = Veo tự bịa layout → lệch nhà cửa/cây.
+                                               // Prop GẮN BỐI CẢNH (nồi, chum, bàn thờ…) BAKE THẲNG vào ảnh anchor
+                                               // này (Veo neo theo, không tốn slot ref riêng) + khai props[] để có desc.
         { "angle": "wide",  "file": "02_locations/cafe_wide.png",  "media_id": "" },
         { "angle": "corner", "file": "02_locations/cafe_corner.png", "media_id": "" }
       ]
+    }
+  ],
+
+  "props": [                            // (tùy chọn) REGISTRY ĐẠO CỤ — nguồn sự thật duy nhất cho mọi prop
+    {                                   //   lặp ≥2 cảnh (hết cảnh này tả "bát cháo" một kiểu, cảnh kia kiểu khác)
+      "id": "cu_khoai",
+      "desc": "a small roasted sweet potato, golden-brown mottled skin, wisps of steam",
+                                        // compiler chèn NGUYÊN VĂN vào [Subject] mọi cảnh có prop này
+      "hero": true,                     // hero-prop = gần camera / mang nghĩa truyện → PHẢI có anchor ảnh
+      "anchor": { "file": "02_props/cu_khoai.png", "media_id": "" }
+                                        // ảnh anchor prop (T2I miễn phí, nền trơn, style đồng bộ mọi anchor).
+                                        // flowgen đưa vào slot ref khi còn chỗ + compose-frame dùng khi composite.
+                                        // Prop KHÔNG hero: bỏ anchor, chỉ desc (đủ cho prop nền thoáng qua).
     }
   ],
 
@@ -98,10 +121,41 @@ Manifest là NGUỒN SỰ THẬT duy nhất về trạng thái dự án. Script 
                                         //   BIẾN THIÊN theo beat, đừng để cả phim 1 độ dài (bài học 15/15
                                         //   cảnh 8.0s = slideshow): căng/hành động 4-6s, ngấm cảm xúc/lặng
                                         //   8-10s, leo thang cao trào thì NGẮN DẦN. Xem scene-grammar.md §5.
-      "characters": ["be_na"],          // id nhân vật xuất hiện → flowgen tự chọn anchor làm ref
+      "characters": ["be_na"],          // id nhân vật xuất hiện → flowgen tự chọn anchor làm ref.
+                                        //   THỨ TỰ = ưu tiên slot ref (3 vé): xếp nhân vật mặt-rõ-gần-camera TRƯỚC.
       "angle": "front",                 // góc nhân vật trong cảnh → chọn anchor đúng góc
       "location": "cafe",               // (tùy chọn) id trỏ locations[] → chọn location anchor + lặp desc bối cảnh
+      "props": ["cu_khoai"],            // (tùy chọn) id trỏ props[] registry → compiler chèn desc NGUYÊN VĂN,
+                                        //   flowgen thêm anchor hero-prop vào slot ref nếu còn chỗ
       "role": "hook",                   // (tùy chọn) vai trò mạch kể: hook|setup|development|turn|payoff|cta
+
+      // ── State-tracking (tùy chọn) — SỔ LIÊN TỤC per cảnh, chống lệch logic xuyên cảnh ──
+      "state": {                        // Claude điền ở stage script, người duyệt ở GATE 1B. QC đo phần đo được
+                                        // (qc-storyboard nhóm G); phần ngữ nghĩa Claude soi checklist gate.
+        "time_of_day": "dusk",          // dawn|morning|noon|afternoon|dusk|night — TRỐNG = KẾ THỪA cảnh trước.
+                                        //   QC WARN khi chạy lùi (qua ngày mới → ghi chú kichban.md) hoặc
+                                        //   mâu thuẫn lighting (night + golden_hour). Compiler đưa vào prompt.
+        "weather": "overcast",          // trống = kế thừa. Compiler đưa vào [Style & Ambiance].
+        "wardrobe":  { "be_na": "same worn brown clothes, hem now dusty" },
+                                        //   per nhân vật — compiler NỐI vào desc trong [Subject] (chỉ phần
+                                        //   THỊ GIÁC vào prompt; đừng nhồi tiểu sử — prompt có ngân sách chú ý)
+        "condition": { "be_na": "weak from hunger, dirt smudged on cheeks" },   // thể trạng NHÌN THẤY được
+        "held_props": { "be_na": ["cu_khoai"] },   // prop trên tay ai — compiler chèn "holding <desc>"
+        "position": "at the village gate, facing home"
+                                        //   vị trí trong không gian — METADATA-ONLY cho QC/ledger + người soi
+                                        //   teleport giữa cảnh; KHÔNG vào prompt (đã có action/context tả)
+      },
+
+      // ── Đồng bộ bằng ảnh cảnh trước (tùy chọn) ──
+      "ref_prev": false,                // true (chỉ mode r2v): frame cuối NÉT clip cảnh trước làm 1 REF —
+                                        //   giữ ánh sáng/layout khi CẮT ĐỔI GÓC cùng không gian (khác link_prev:
+                                        //   không ép liền mạch chuyển động). LUẬT: ref_prev THAY location anchor
+                                        //   (frame thật mạnh hơn anchor tĩnh), danh tính vẫn từ anchor GỐC
+                                        //   (chống trôi photocopy); chỉ chain từ clip đã qua qc-clips.
+      "composite": false,               // true: cảnh ĐÔNG thực thể (>3 ứng viên neo) → đường COMPOSITE
+                                        //   FIRST-FRAME: flowgen compose-frame ghép dần từng thực thể vào
+                                        //   1 khung hình đầu bằng edit ảnh (miễn phí), duyệt, rồi I2V.
+                                        //   Né hẳn giới hạn 3 ref — mọi thứ khoá trong pixel. QC gợi ý cờ này.
 
       // ── Field craft chi tiết (tùy chọn) — compiler ghép thành prompt Veo tự nhiên ──
       "action": "a little girl reaches up and picks a ripe grape, smiling",  // HÀNH ĐỘNG chính (tiếng Anh, ngắn)
@@ -174,10 +228,13 @@ projects/<tên>/
 ├── 01_script/          # brief.md + kichban.md (bản cho người đọc/duyệt)
 ├── 02_characters/      # char sheet + anchors nhân vật
 ├── 02_locations/       # grid bối cảnh + anchors location (khoá setting)
+├── 02_props/           # anchors hero-prop (khoá đạo cụ)
 ├── 03_images/          # ảnh khung đầu từng cảnh (T2I — miễn phí, gen tới khi ưng)
+│                       #   sceneNN_comp_K.png = các lượt composite · sceneNN_chain.png = khung chain
 ├── 04_clips/           # clip từng cảnh (I2V — tốn credit, chỉ gen sau khi duyệt ảnh)
 ├── 05_audio/           # narration.mp3 + subs.ass + timings.json
-└── 06_final/           # final.mp4
+├── 06_final/           # final.mp4
+└── qc_clips/           # frame trích từ clip thật + ledger.md (flowgen qc-clips — soi lệch trước ráp)
 ```
 
 ## Quy tắc điền storyboard (chống lỗi hay gặp)
@@ -270,6 +327,25 @@ field có cấu trúc để (a) QC tự động, (b) auto-fill từ tri thức �
   (chọn theo Laplacian variance, chống motion-blur) của clip cảnh trước → upload → làm khung đầu cảnh
   này. Gen TUẦN TỰ theo thứ tự manifest; cần clip cảnh trước tồn tại (cùng run hoặc run trước). Cảnh
   `link_prev` không cần ảnh riêng đã duyệt. Cặp đổi bối cảnh hoàn toàn thì ĐỪNG bật (frame-chain vô nghĩa).
+
+## Ba đường gen theo số thực thể cần neo (đồng bộ toàn diện — chất lượng trước credit)
+
+Ngân sách reference của Veo/Flow là **3 ảnh/generation** (tài liệu Vertex AI còn ghi 3 ảnh vốn cho
+MỘT chủ thể; ref và first-frame loại trừ nhau trong 1 lần gen). Chọn đường theo cảnh:
+
+| Cảnh | Đường gen | Cơ chế neo |
+|---|---|---|
+| Thường (≤2 nhân vật mặt rõ + location) | **i2v từ ảnh khung đầu ĐÃ DUYỆT** (mặc định pipeline) | ảnh gen với ≤3 anchor ref, người duyệt khung |
+| Coverage timestamp (shots[]) | **r2v + anchor** (đã kiểm chứng nội bộ cảnh 9) | ≤3 ref: nhân vật > prop hero > location |
+| Đông thực thể (>3 ứng viên neo) | **composite first-frame** (`flowgen compose-frame`) | ghép DẦN từng thực thể vào 1 khung bằng edit ảnh miễn phí (mỗi lượt ≤3 ref, tích lũy), duyệt khung, rồi i2v |
+
+- Thứ tự ưu tiên slot khi phải cắt: **nhân vật mặt rõ → ref_prev (frame cảnh trước) → hero-prop →
+  location anchor** (ref_prev có mặt thì location anchor NHƯỜNG — frame thật chứa không gian rồi).
+- 2 luật an toàn khi dùng ảnh cảnh trước (link_prev / ref_prev): ① danh tính nhân vật LUÔN từ anchor
+  gốc, frame trước chỉ mang vai không gian/ánh sáng (chống trôi photocopy qua nhiều đời);
+  ② chỉ chain/ref từ clip đã qua `flowgen qc-clips` (chống lỗi AI-tell lây lan).
+- MỌI cảnh đường i2v/composite: khung đầu PHẢI người duyệt trước khi đốt credit (kể cả khung
+  chain — `flowgen extract-chain` trích trước để duyệt, scene-clips dùng lại file đã duyệt).
 
 ## Đa giọng — "vừa kể vừa đối thoại" (lồng tiếng, ĐÃ thực thi)
 

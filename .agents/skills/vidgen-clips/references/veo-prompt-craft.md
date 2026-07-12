@@ -156,6 +156,15 @@ AI video mỗi cảnh gen độc lập → hay tự đảo hướng/nhảy setti
 Ranh giới rõ: `screen_direction`/`match_cut_with` là **continuity NỘI DUNG** (đưa vào prompt/lên kế
 hoạch cảnh); còn `transition.type` (xfade/dissolve) là **hiệu ứng BIÊN TẬP** ở Stage 4 — hai thứ khác nhau.
 
+**State → prompt (sổ liên tục, 2026-07-12):** compiler tự chèn phần THỊ GIÁC của `state{}`:
+`wardrobe`/`condition`/`held_props` nối vào desc nhân vật ở [Subject]; `time_of_day`/`weather`
+(kế thừa cảnh trước khi trống) vào [Style & Ambiance] — ánh sáng hết trôi vô cớ giữa cảnh vì
+thời điểm được ghi TƯỜNG MINH mọi prompt. `position` là metadata-only cho QC (không vào prompt —
+action/context đã tả). Đừng nhồi trạng thái phi-thị-giác (tâm lý, tiểu sử): prompt có ngân sách
+chú ý, cái không nhìn thấy được là nhiễu. Ref ảnh cảnh trước: `ref_prev` (r2v, thay location
+anchor — đổi góc cùng không gian) vs `link_prev` (i2v, khung đầu — liền mạch); 2 luật an toàn ở
+`vidgen-character/references/consistency-and-ai-tells.md §3b`.
+
 ## X · Ranh giới ảnh→video: nội dung engine chặn ở tầng VIDEO (không lộ ở tầng ảnh)
 
 **Nguyên lý:** tầng ảnh (T2I, rẻ) và tầng video (I2V/T2V, đắt) có **safety filter KHÁC nhau**. Ảnh gen
