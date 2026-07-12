@@ -115,9 +115,9 @@ Veo 3.1 nhận prompt đánh MỐC THỜI GIAN để gen NHIỀU cú cắt xen t
   không gian) — giải đúng chỗ khó nhất của coverage bằng regen.
 - Tổng vẫn 4/6/8/10s → mỗi cú 2-4s: tự nhiên có nhịp cắt nhanh + cắt TRƯỚC khi model kịp morph.
 - Giới hạn: cú 2-4s KHÔNG hợp cảnh ngấm cần cú dài liên tục — cảnh đó để 1 cú như cũ.
-- **Độ nghe lời mốc thời gian CHƯA kiểm chứng độc lập** → beat coverage đầu tiên của dự án phải
-  nằm trong CLIP THỬ (GATE 2) để đo thật trước khi tin cả batch (đúng nguyên lý clip thử = cảnh
-  rủi ro nhất).
+- **ĐÃ kiểm chứng nội bộ 1 mẫu (2026-07-12):** r2v 8s + 2 anchor, 3 cú cắt CỨNG đúng mốc ±0.2s,
+  nhân vật/ánh sáng nhất quán xuyên cú. 1 mẫu ≠ khái quát → beat coverage đầu tiên của MỖI dự án
+  vẫn phải nằm trong CLIP THỬ (GATE 2) trước khi tin cả batch (nguyên lý clip thử = cảnh rủi ro nhất).
 - Khai báo qua `scenes[].shots[]`, compiler tự ghép (xem §7 + `project-schema.md`).
 
 ### 6b · Master frame → ingredient (opt-in, +1-2 gen mỗi beat) [nguồn Flow Help]

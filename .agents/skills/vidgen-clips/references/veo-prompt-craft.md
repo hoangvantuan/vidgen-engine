@@ -36,8 +36,11 @@ wide + close + insert như phim, các cú tự nhất quán (chung generation):
 ```
 - Khai báo qua `scenes[].shots[]` — `flowgen compile-prompts` tự ghép đúng định dạng (thiết lập
   chung subject+context trước, chuỗi mốc sau, style cuối). Mỗi cú 2-4s; tổng ≤ `duration`.
-- **Độ nghe lời mốc CHƯA kiểm chứng độc lập** → cảnh coverage đầu tiên phải nằm trong CLIP THỬ
-  (GATE 2). Không đạt → hạ về 1 cú, hoặc đường B: **save frame trong Flow** (chính thức, Flow Help)
+- **ĐÃ kiểm chứng nội bộ 1 mẫu (2026-07-12, r2v 8s + 2 anchor ref):** 3 cú wide→close→insert cắt
+  CỨNG đúng mốc ±0.2s, không morph, nhân vật + ánh sáng nhất quán cả 3 cú, chi tiết prompt phụ
+  ("still warm" → khói) cũng được diễn. 1 mẫu pass ≠ luôn pass → cảnh coverage đầu tiên của MỖI dự
+  án vẫn nằm trong CLIP THỬ (GATE 2). Không đạt → hạ về 1 cú, hoặc đường B: **save frame trong
+  Flow** (chính thức, Flow Help)
   — trích frame master làm ingredient/khung đầu regen cú cận (+1-2 gen; mặt có thể drift ở close-up,
   ánh sáng chỉ gần khớp — chèn insert giữa 2 cú lệch để mắt "reset").
 - Khi nào NÊN coverage, tiến trình cỡ cảnh, luật 30°/match-cut giữa các cú: thiết kế ở tầng
