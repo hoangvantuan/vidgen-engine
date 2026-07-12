@@ -87,7 +87,10 @@ Manifest là NGUỒN SỰ THẬT duy nhất về trạng thái dự án. Script 
       "prompt": "",                     // prompt hình tiếng Anh. ĐỂ RỖNG → compiler tự ghép từ field craft
                                         // bên dưới. Ghi tay = override luôn (compiler bỏ qua cảnh này).
       "mode": "i2v",                    // "i2v" (mặc định) | "t2v" | "r2v" | "fl"
-      "duration": 8,                    // 4|6|8|10 — thời lượng gen; khi ráp sẽ setpts khớp lời đọc
+      "duration": 8,                    // 4|6|8|10 — thời lượng gen; khi ráp sẽ setpts khớp lời đọc.
+                                        //   BIẾN THIÊN theo beat, đừng để cả phim 1 độ dài (bài học 15/15
+                                        //   cảnh 8.0s = slideshow): căng/hành động 4-6s, ngấm cảm xúc/lặng
+                                        //   8-10s, leo thang cao trào thì NGẮN DẦN. Xem scene-grammar.md §5.
       "characters": ["be_na"],          // id nhân vật xuất hiện → flowgen tự chọn anchor làm ref
       "angle": "front",                 // góc nhân vật trong cảnh → chọn anchor đúng góc
       "location": "cafe",               // (tùy chọn) id trỏ locations[] → chọn location anchor + lặp desc bối cảnh
@@ -113,6 +116,23 @@ Manifest là NGUỒN SỰ THẬT duy nhất về trạng thái dự án. Script 
         { "char": "be_na", "line": "Con tìm thấy rồi!" }   // char trỏ characters[].id → dùng voice_id của nhân vật đó
       ],                                //   MÔ HÌNH P1: cảnh có dialogue[] thì KHÔNG dùng `vo` — mỗi cảnh 1 kiểu tiếng.
 
+      // ── Coverage (tùy chọn) — beat ĐẮT kể bằng NHIỀU cú trong CÙNG 1 lần gen ──
+      "shots": [                        // (tùy chọn) các cú máy cắt xen trong 1 generation (timestamp prompting
+                                        //   Veo 3.1, nguồn Google Cloud — 0 credit thêm). Compiler ghép thành
+                                        //   prompt "[00:00-00:03] ... [00:03-00:06] ...". Tổng `to` cuối PHẢI ≤
+                                        //   duration. Mỗi cú 2-4s. Dùng cho role hook/turn/payoff + cảnh thoại;
+                                        //   cảnh ngấm cần cú dài thì ĐỪNG dùng. Xem scene-grammar.md §6a-§7.
+        { "from": 0, "to": 3, "shot_size": "wide",  "camera_angle": "eye_level",
+          "action": "an old woman presses a sweet potato into the girl's hands" },
+        { "from": 3, "to": 6, "shot_size": "close", "camera_angle": "eye_level",
+          "action": "the girl's face, eyes widening, she looks up" },
+        { "from": 6, "to": 8, "shot_size": "extreme_close",
+          "action": "insert: the sweet potato in her small hands, steam rising" }
+      ],                                //   Cảnh KHÔNG có shots[] → 1 cú như cũ (backward-compat). Khi có
+                                        //   shots[]: shot_size/camera_angle/action TOP-LEVEL bị bỏ qua ở khối
+                                        //   [Cinematography]/[Action] (mỗi cú tự khai), các field còn lại của
+                                        //   cảnh (emotion/lighting/style/subject/context/sfx) vẫn áp CHUNG.
+
       // ── Continuity giữa cảnh (tùy chọn) — nối liền mạch, chống nhảy setting/đảo hướng ──
       "screen_direction": "L2R",        // hướng chuyển động trên khung: L2R|R2L|toward|away|static (giữ nhất quán mạch)
       "subject_position": "center",     // vị trí chủ thể: left|center|right — dùng cho match cut & nối vị trí
@@ -126,10 +146,12 @@ Manifest là NGUỒN SỰ THẬT duy nhất về trạng thái dự án. Script 
       "end_image": { "media_id": "" },  // mode "fl", hoặc frame-chain đợt 2 (khung cuối cảnh này)
       "clip": { "file": "04_clips/scene01.mp4", "media_id": "", "status": "pending" },
       // clip.status: "pending" | "done" | "failed"
-      "transition": { "type": "fade", "dur": 0.5 }
-      // chuyển cảnh SAU cảnh này (sang cảnh kế) — chọn theo CẢM XÚC, không đồng loạt 1 kiểu:
-      // "dissolve" vào mơ/hồi tưởng · "fadewhite" tỉnh giấc/nhảy thời gian · "fade" đoạn dịu
-      // · "cut" (hoặc bỏ field) nhịp nhanh/hành động. dur giữ 0.4-0.6s để không phá timing.
+      "transition": { "type": "cut" }
+      // chuyển cảnh SAU cảnh này (sang cảnh kế). MẶC ĐỊNH là "cut" (hoặc bỏ field) — phim mặc
+      // định CẮT; transition mềm là DẤU CÂU MANG NGHĨA, mỗi lần dùng phải trả lời "nghĩa gì ở đây?":
+      // "dissolve" vào mơ/hồi tưởng · "fadewhite" tỉnh giấc/nhảy thời gian · "fade" đoạn dịu/thời
+      // gian trôi. dur giữ 0.4-0.6s. Bài học đo được: 67% fade đồng loạt = keo an toàn vô nghĩa,
+      // chính nó tạo cảm giác trôi đều slideshow. Xem scene-grammar.md §5.
     }
   ],
 
@@ -161,7 +183,9 @@ projects/<tên>/
   (đừng để cảnh sau đổi setting bất ngờ vì prompt không ràng buộc địa điểm với cảnh trước).
 - Style chung (art style, palette, lighting) lặp NGUYÊN VĂN ở mọi prompt → các cảnh đồng bộ.
 - Đổi góc nhân vật → tách cảnh mới, đặt `angle` đúng.
-- 1 cảnh = 1 ý = 1 chuyển động chính, 4-10s. Cảnh không nhân vật → `mode: "t2v"`, bỏ `characters`.
+- 1 cảnh = 1 ý, 4-10s. Mặc định 1 chuyển động chính (1 cú); beat ĐẮT (hook/turn/payoff, thoại) →
+  cân nhắc `shots[]` 2-3 cú cắt xen trong cùng lần gen (coverage — `scene-grammar.md` §6-§7).
+  Cảnh không nhân vật → `mode: "t2v"`, bỏ `characters`.
 - `vo` mỗi cảnh nên đọc hết trong ~`duration` giây (tiếng Việt ~3-4 chữ/giây;
   cảnh 8s ≈ 24-30 chữ). Lệch nhiều thì khi ráp clip bị kéo/nén quá tay.
 - **`vo` PHẢI đủ dấu tiếng Việt** — TTS (consumer ở Stage 4) đọc nguyên văn field này; viết không dấu
@@ -210,7 +234,11 @@ field có cấu trúc để (a) QC tự động, (b) auto-fill từ tri thức �
    - **[Style & Ambiance]** ← `style` (project) + `lighting` + `atmosphere` + `sfx[]`.
 3. **Emotion auto-fill:** nếu `lighting`/`camera_angle`/`atmosphere` để trống mà có `emotion` →
    compiler điền mặc định theo bảng `references/emotion-recipe.md`. Điền tay luôn thắng.
-4. Ghi kết quả vào `scenes[].prompt`. **Idempotent** — chạy lại không nhân đôi. GATE 1B (`script_lock`) duyệt prompt đã compile — chỉ chạy compile SAU khi kịch bản đã qua GATE 1A (`story_lock`).
+4. **Coverage `shots[]`:** cảnh có `shots[]` → khối [Cinematography]+[Action] được thay bằng CHUỖI
+   mốc thời gian `[00:00-00:03] <cỡ cảnh, góc> ... <action cú đó>. [00:03-00:06] ...` (timestamp
+   prompting Veo 3.1); mỗi cú thiếu `action` = THIẾU LIỆU. [Subject]/[Context]/[Style & Ambiance]
+   vẫn áp CHUNG toàn generation (nhất quán nội tại). `to` cú cuối ≤ `duration`; QC warn nếu lệch.
+5. Ghi kết quả vào `scenes[].prompt`. **Idempotent** — chạy lại không nhân đôi. GATE 1B (`script_lock`) duyệt prompt đã compile — chỉ chạy compile SAU khi kịch bản đã qua GATE 1A (`story_lock`).
 
 **Nhóm field craft chi tiết (scene):**
 - **`emotion`** — cảm xúc chủ đạo; là "bộ não" auto-fill. Xem `emotion-recipe.md` để biết mỗi cảm

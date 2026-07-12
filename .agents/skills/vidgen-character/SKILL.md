@@ -79,6 +79,10 @@ Veo có safety/giới hạn riêng ở tầng VIDEO mà tầng ảnh không lộ
 làm clip thử** — nội dung nhạy cảm nhất (trẻ em/bạo lực/đau khổ/y tế) hoặc tương tác/chuyển động phức tạp nhất.
 Cảnh khó nhất qua được thì phần còn lại gần như chắc qua; nó chặn thì biết NGAY (1 credit) thay vì vỡ giữa
 batch (chục credit). Đừng chọn cảnh phong cảnh/tĩnh cho "chắc ăn" — chắc ăn kiểu đó là tự lừa.
+**Dự án có cảnh coverage (`shots[]`, timestamp prompting):** clip thử NÊN là (hoặc kèm) MỘT cảnh
+coverage — độ "nghe lời" mốc thời gian của Veo chưa kiểm chứng độc lập, phải đo thật TRƯỚC khi cả
+batch đặt cược vào nó. Soi: có cắt đúng mốc không? các cú có giữ nhân vật/ánh sáng nội tại không?
+Không đạt → hạ cảnh đó về 1 cú hoặc chuyển đường master→regen (`scene-grammar.md §6b`).
 
 Gen thử cảnh rủi ro nhất có nhân vật:
 ```bash

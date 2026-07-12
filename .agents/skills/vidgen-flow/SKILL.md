@@ -48,8 +48,10 @@ prompt). Phản biện **cả mạch truyện** không chỉ hook — through-li
 open loop (cấy-đóng?), mạch (cảnh thừa/gãy?), lời (đọc-to vấp không?). User gật → `gates.story_lock=true`.
 **Chưa gật → KHÔNG dựng storyboard** (không compile prompt).
 
-**🚦 GATE 1B · script lock** (storyboard/prompt): sau khi compile — trình field/prompt (kiểm cỡ cảnh
-đa dạng, continuity, không "THIẾU LIỆU", 1 CTA). User gật → `gates.script_lock=true`.
+**🚦 GATE 1B · script lock** (storyboard/prompt): sau khi compile — chạy `flowgen qc-storyboard`
+(máy đo nhịp/góc/transition/continuity, warn-only) rồi trình field/prompt KÈM kết quả QC: mỗi ⚠
+hoặc đã sửa hoặc nêu lý do phá cách (kiểm cỡ cảnh + góc máy đa dạng, nhịp duration biến thiên,
+beat đắt có coverage `shots[]`, continuity, không "THIẾU LIỆU", 1 CTA). User gật → `gates.script_lock=true`.
 Chưa gật → KHÔNG đụng tới gen. Video không nhân vật cố định (phong cảnh, b-roll) →
 sau GATE 1B bỏ qua STEP 2, mở luôn `character_lock` và ghi chú lý do.
 Backward-compat: dự án cũ thiếu `story_lock` → coi như đã mở, chạy y nguyên.

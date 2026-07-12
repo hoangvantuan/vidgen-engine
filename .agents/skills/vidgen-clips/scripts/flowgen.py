@@ -11,6 +11,8 @@ Subcommands:
                 (v2v = SỬA clip đã có, khỏi gen lại: --video-id <media_id> hoặc --video-file <local>)
   scene-images  Batch: gen ảnh khung đầu cho các cảnh chưa có ảnh (đọc project.json)
   scene-clips   Batch: I2V các cảnh đã duyệt ảnh, resume theo manifest, retry 1 lần
+  compile-prompts  Ghép scenes[].prompt từ field craft (hỗ trợ shots[] → timestamp coverage)
+  qc-storyboard    Đo luật ngữ pháp cảnh (nhịp/góc/transition/continuity) — warn-only
 
 Chạy bằng python có deps (websockets, cv2, numpy): ~/.venv/claude/bin/python
 Ví dụ:
@@ -199,13 +201,42 @@ def _recipe(emotion):
     return EMOTION_RECIPE.get(EMOTION_ALIAS.get(e, e))
 
 
+def _ts(sec) -> str:
+    """Giây → mốc 'MM:SS' cho timestamp prompting."""
+    sec = int(sec or 0)
+    return f"{sec // 60:02d}:{sec % 60:02d}"
+
+
+def _compile_shots_block(s: dict) -> tuple[str | None, str]:
+    """COVERAGE: ghép shots[] thành chuỗi mốc thời gian (timestamp prompting Veo 3.1 —
+    nhiều cú cắt xen trong CÙNG 1 generation, nguồn Google Cloud). Thay cho khối
+    [Cinematography]+[Action] của cảnh 1-cú. Trả (block|None, note lỗi)."""
+    parts, warns = [], []
+    for i, sh in enumerate(s.get("shots") or [], 1):
+        act = (sh.get("action") or "").strip()
+        if not act:
+            return None, f"THIẾU LIỆU: shots[{i}] không có 'action'"
+        cine = [_SHOT.get(sh.get("shot_size", ""), sh.get("shot_size", "")),
+                _ANGLE.get(sh.get("camera_angle", ""), sh.get("camera_angle", "")),
+                _MOVE.get(sh.get("camera_move", ""), sh.get("camera_move", ""))]
+        cine = ", ".join(x for x in cine if x)
+        parts.append(f"[{_ts(sh.get('from'))}-{_ts(sh.get('to'))}] "
+                     + (f"{cine}: {act}" if cine else act))
+    last_to = (s.get("shots") or [{}])[-1].get("to")
+    if last_to and s.get("duration") and int(last_to) > int(s["duration"]):
+        warns.append(f"shots vượt duration ({last_to}s > {s['duration']}s)")
+    return ". ".join(parts), ("; ".join(warns) if warns else "")
+
+
 def compile_scene_prompt(m: dict, s: dict) -> tuple[str | None, str]:
     """Ghép prompt Veo từ field craft. Trả (prompt|None, note).
-    None = bỏ qua (override / thiếu liệu). Idempotent, emotion auto-fill field trống."""
+    None = bỏ qua (override / thiếu liệu). Idempotent, emotion auto-fill field trống.
+    Cảnh có shots[] → coverage: chuỗi timestamp thay [Cinematography]+[Action]."""
     if s.get("prompt_override"):
         return None, "giữ nguyên (prompt_override — prompt viết tay)"
+    shots = s.get("shots") or []
     action = (s.get("action") or "").strip()
-    if not action:
+    if not action and not shots:
         # Không có action để ghép. Nếu có prompt tay (dự án Mức 3 cũ) → giữ, đừng xoá.
         if (s.get("prompt") or "").strip():
             return None, "giữ prompt cũ (thiếu 'action'; set prompt_override=true để chốt viết tay)"
@@ -221,9 +252,17 @@ def compile_scene_prompt(m: dict, s: dict) -> tuple[str | None, str]:
     lens = (s.get("lens") or "").strip()
     sdir = (s.get("screen_direction") or "").strip()
 
-    # [Cinematography]
-    cine = [_SHOT.get(shot_size, shot_size), _ANGLE.get(camera_angle, camera_angle),
-            _MOVE.get(camera_move, camera_move), _LENS.get(lens, lens), _DIR.get(sdir, sdir)]
+    # [Cinematography] — cảnh coverage (shots[]) tự khai cỡ/góc TỪNG CÚ trong block timestamp,
+    # nên bỏ cine/action top-level; chỉ giữ lens + screen_direction áp chung cả generation.
+    shots_block, shots_note = (None, "")
+    if shots:
+        shots_block, shots_note = _compile_shots_block(s)
+        if shots_block is None:
+            return None, shots_note  # THIẾU LIỆU trong shots[]
+        cine = [_LENS.get(lens, lens), _DIR.get(sdir, sdir)]
+    else:
+        cine = [_SHOT.get(shot_size, shot_size), _ANGLE.get(camera_angle, camera_angle),
+                _MOVE.get(camera_move, camera_move), _LENS.get(lens, lens), _DIR.get(sdir, sdir)]
     cine = [x for x in cine if x]
 
     # [Subject] — nhắc NGUYÊN VĂN desc nhân vật + thoại trong hình
@@ -250,15 +289,26 @@ def compile_scene_prompt(m: dict, s: dict) -> tuple[str | None, str]:
     amb = [x for x in amb if x]
 
     parts = []
-    if cine:    parts.append(", ".join(cine))
-    if subj:    parts.append(", ".join(subj))
-    parts.append(action)
-    if context: parts.append(context)
-    if amb:     parts.append(", ".join(amb))
+    if shots_block:
+        # Coverage: thiết lập chung (subject + context) TRƯỚC, rồi chuỗi mốc cắt xen, cuối style.
+        if subj:    parts.append(", ".join(subj))
+        if context: parts.append(context)
+        if cine:    parts.append(", ".join(cine))
+        parts.append(shots_block)
+        if amb:     parts.append(", ".join(amb))
+    else:
+        if cine:    parts.append(", ".join(cine))
+        if subj:    parts.append(", ".join(subj))
+        parts.append(action)
+        if context: parts.append(context)
+        if amb:     parts.append(", ".join(amb))
     prompt = ". ".join(p.rstrip(". ") for p in parts if p) + "."
-    filled = [f for f in ("shot_size", "camera_angle", "lighting", "atmosphere")
-              if not (s.get(f) or "").strip() and rec.get(f)]
-    note = "compiled" + (f" (emotion auto-fill: {', '.join(filled)})" if filled else "")
+    fill_fields = ("lighting", "atmosphere") if shots else \
+        ("shot_size", "camera_angle", "lighting", "atmosphere")  # shots[]: cỡ/góc per-cú, không auto-fill
+    filled = [f for f in fill_fields if not (s.get(f) or "").strip() and rec.get(f)]
+    note = "compiled" + (f" (coverage {len(shots)} cú)" if shots else "") \
+        + (f" (emotion auto-fill: {', '.join(filled)})" if filled else "") \
+        + (f" ⚠ {shots_note}" if shots_note else "")
     return prompt, note
 
 
@@ -282,6 +332,144 @@ async def cmd_compile_prompts(a):  # async để khớp dispatch asyncio.run; th
           + (" (DRY-RUN, chưa ghi)" if a.dry_run else ""))
     for sid, note in warned:
         print(f"  ⚠ cảnh {sid}: {note}")
+
+
+# ── QC storyboard (local, warn-only) ──────────────────────────────────────
+# Đo các luật ngữ pháp cảnh ĐO ĐƯỢC (scene-grammar.md §7): đơn điệu nhịp/góc/cỡ, transition
+# đồng loạt, thiếu re-establish, field continuity mồ côi, beat đắt chưa coverage, VO lệch nhịp.
+# WARN-ONLY: luật điện ảnh là mặc-định-để-phá-có-chủ-đích — máy đo, NGƯỜI quyết ở GATE 1B.
+# Ra đời từ bài học dự án thật đầu tiên: 15/15 cảnh 8.0s, 8 cảnh liền high-angle, 67% fade,
+# 0 link — mọi guidance chữ đều có sẵn mà không giữ được; chỉ cái ĐO ĐƯỢC mới thành kỷ luật.
+
+_ANGLE_RX = [  # regex prompt → key chuẩn (dự án cũ prompt tay: góc chôn trong text vẫn đo được)
+    ("over_shoulder", r"over[- ]the[- ]shoulder"), ("overhead", r"overhead|bird'?s[- ]eye|top[- ]down"),
+    ("dutch", r"dutch"), ("low", r"low[- ]angle|worm'?s[- ]eye"), ("high", r"high[- ]angle|aerial"),
+    ("eye_level", r"eye[- ]level"),
+]
+_SHOT_RX = [
+    ("extreme_close", r"extreme close[- ]up|macro"), ("close", r"close[- ]up"),
+    ("establishing", r"establishing"), ("wide", r"wide shot|wide[- ]angle|long shot"),
+    ("medium", r"medium shot"),
+]
+_SOFT_TRANS = {"fade", "dissolve", "fadewhite", "fadeblack", "wipeleft", "wiperight",
+               "slideleft", "slideright", "circleopen", "circleclose"}
+
+
+def _rx_pick(text: str, table) -> str:
+    import re
+    for key, rx in table:
+        if re.search(rx, text, re.IGNORECASE):
+            return key
+    return ""
+
+
+def _effective(s: dict, field: str, rx_table) -> str:
+    """Giá trị HIỆU DỤNG của field: điền tay → auto-fill emotion → mò trong prompt (dự án cũ)."""
+    v = (s.get(field) or "").strip()
+    if v:
+        return v
+    rec = _recipe(s.get("emotion", "")) or {}
+    if rec.get(field):
+        return rec[field]
+    return _rx_pick(s.get("prompt") or "", rx_table)
+
+
+def _runs(values):
+    """Gom chuỗi giá trị TRÙNG liên tiếp → list (giá trị, [ids]). Giá trị rỗng phá chuỗi."""
+    out = []
+    for sid, v in values:
+        if v and out and out[-1][0] == v:
+            out[-1][1].append(sid)
+        else:
+            out.append([v, [sid]])
+    return [(v, ids) for v, ids in out if v]
+
+
+async def cmd_qc_storyboard(a):  # async khớp dispatch; thân thuần local
+    pdir = Path(a.project)
+    m = load_manifest(pdir)
+    scenes = m.get("scenes", [])
+    if not scenes:
+        print("Manifest không có cảnh nào.")
+        return
+    W, I = [], []  # (nhóm, msg) — ⚠ warn / ℹ info
+
+    # A · NHỊP — duration phải biến thiên theo beat
+    durs = [(s["id"], s.get("duration", 8)) for s in scenes]
+    if len({d for _, d in durs}) == 1 and len(durs) >= 4:
+        W.append(("NHỊP", f"CẢ {len(durs)} cảnh cùng duration {durs[0][1]}s — chữ ký slideshow. "
+                          "Biến thiên theo beat: căng 4-6s, ngấm 8-10s, cao trào ngắn dần."))
+    else:
+        for v, ids in _runs(durs):
+            if len(ids) >= 4:
+                W.append(("NHỊP", f"cảnh {ids[0]}–{ids[-1]}: {len(ids)} cảnh liền cùng {v}s — "
+                                  "nhịp đều, cân nhắc đổi (trừ khi chủ đích, vd ru ngủ)."))
+
+    # B · GÓC/CỠ — chuỗi trùng liên tiếp (điểm nhìn trôi vô thức)
+    for field, rx, label, lim in (("camera_angle", _ANGLE_RX, "GÓC MÁY", 3),
+                                  ("shot_size", _SHOT_RX, "CỠ CẢNH", 3)):
+        vals = [(s["id"], _effective(s, field, rx)) for s in scenes]
+        for v, ids in _runs(vals):
+            if len(ids) >= lim:
+                W.append((label, f"cảnh {ids[0]}–{ids[-1]}: {len(ids)} cảnh liền cùng '{v}' — "
+                                 "đổi góc/cỡ hoặc ghi lý do trục điểm nhìn vào kichban.md."))
+
+    # C · CHUYỂN CẢNH — transition mềm đồng loạt (cut là mặc định phim, không warn)
+    trans = [((s.get("transition") or {}).get("type") or "cut") for s in scenes[:-1]]
+    if trans:
+        from collections import Counter
+        top, n = Counter(trans).most_common(1)[0]
+        if top in _SOFT_TRANS and n / len(trans) > 0.6:
+            W.append(("CHUYỂN CẢNH", f"'{top}' chiếm {n}/{len(trans)} ({n * 100 // len(trans)}%) — "
+                                     "transition mềm là dấu câu mang nghĩa, mặc định nên là cut."))
+
+    # D · CONTINUITY/COVERAGE — re-establish, field mồ côi, beat đắt chưa cover
+    prev = None
+    for s in scenes:
+        loc = s.get("location")
+        if loc and prev is not None and loc != prev.get("location"):
+            eff = _effective(s, "shot_size", _SHOT_RX)
+            if eff not in ("wide", "establishing"):
+                verb = "vào location mới" if prev.get("location") else "quay lại location"
+                W.append(("CONTINUITY", f"cảnh {s['id']}: {verb} '{loc}' bằng '{eff or '?'}' — "
+                                        "nên wide/establishing (re-establish) trừ khi phá có chủ đích."))
+        if prev is not None and loc and loc == prev.get("location"):
+            shared = set(prev.get("characters") or []) & set(s.get("characters") or [])
+            linked = s.get("link_prev") or s.get("match_cut_with") is not None \
+                or prev.get("match_cut_with") is not None
+            if shared and not linked:
+                I.append(("CONTINUITY", f"cảnh {prev['id']}→{s['id']}: cùng location + nhân vật mà "
+                                        "không link_prev/match_cut — ứng viên nối (scene-grammar §7)."))
+        if (s.get("role") in ("hook", "turn", "payoff") or s.get("dialogue")) and not s.get("shots"):
+            I.append(("COVERAGE", f"cảnh {s['id']} (role={s.get('role') or 'thoại'}): beat đắt chưa có "
+                                  "shots[] — cân nhắc coverage 2-3 cú (scene-grammar §6a)."))
+        prev = s
+
+    # E · shots[] hợp lệ + VO khớp nhịp đọc (~3-4 chữ/giây)
+    for s in scenes:
+        for i, sh in enumerate(s.get("shots") or [], 1):
+            f, t = sh.get("from", 0), sh.get("to", 0)
+            if t <= f:
+                W.append(("SHOTS", f"cảnh {s['id']} shots[{i}]: from/to không tăng ({f}→{t})."))
+            elif not (1.5 <= t - f <= 4.5):
+                I.append(("SHOTS", f"cảnh {s['id']} shots[{i}]: cú {t - f}s — nên 2-4s/cú."))
+        last = (s.get("shots") or [{}])[-1].get("to")
+        if last and last > s.get("duration", 8):
+            W.append(("SHOTS", f"cảnh {s['id']}: shots kết ở {last}s > duration {s.get('duration', 8)}s."))
+        vo = (s.get("vo") or "").strip()
+        if vo:
+            rate = len(vo.split()) / max(1, s.get("duration", 8))
+            if rate > 5:
+                W.append(("VO", f"cảnh {s['id']}: {len(vo.split())} chữ / {s.get('duration', 8)}s "
+                                f"(~{rate:.1f} chữ/s) — VO dài quá, clip sẽ bị kéo chậm lộ trôi nổi."))
+            elif rate < 2:
+                I.append(("VO", f"cảnh {s['id']}: VO thưa (~{rate:.1f} chữ/s) — chủ đích lặng thì OK."))
+
+    for tag, items in (("⚠", W), ("ℹ", I)):
+        for group, msg in items:
+            print(f"{tag} [{group}] {msg}")
+    print(f"\nQC storyboard: {len(W)} cảnh báo, {len(I)} gợi ý — WARN-ONLY, người quyết ở GATE 1B."
+          f"\nLuật + cách phá có chủ đích: vidgen-script/references/scene-grammar.md")
 
 
 # ── bridge ────────────────────────────────────────────────────────────────
@@ -546,6 +734,11 @@ def main():
     p.add_argument("--scene", type=int, nargs="*", help="chỉ các cảnh này")
     p.add_argument("--dry-run", dest="dry_run", action="store_true", help="in prompt ra, KHÔNG ghi manifest")
     p.set_defaults(fn=cmd_compile_prompts)
+
+    p = sub.add_parser("qc-storyboard",
+                       help="đo luật ngữ pháp cảnh (nhịp/góc/transition/continuity) — warn-only, local")
+    p.add_argument("--project", required=True, help="thư mục dự án chứa project.json")
+    p.set_defaults(fn=cmd_qc_storyboard)
 
     p = sub.add_parser("scene-images", help="batch gen ảnh khung đầu theo project.json")
     p.add_argument("--project", required=True, help="thư mục dự án chứa project.json")

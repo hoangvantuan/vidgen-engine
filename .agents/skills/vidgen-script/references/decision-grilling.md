@@ -105,6 +105,11 @@ user, nêu **1-2 rủi ro còn lại mình chưa chắc** kèm hỏi thẳng, th
   kết đang tuột sang thông điệp khác?" Trình bản lời đọc-to, chưa kèm storyboard.
 - GATE 1B (storyboard): "Prompt đã compile có cảnh nào 'THIẾU LIỆU', cỡ cảnh có đơn điệu, continuity
   (`screen_direction`/`location`) có nhất quán mạch không?" — duyệt KỸ THUẬT sau khi hướng đã chốt ở 1A.
+  Chạy `flowgen qc-storyboard` TRƯỚC, trình kèm kết quả: mỗi ⚠ máy đo hoặc đã sửa hoặc nêu lý do phá
+  cách — đừng để user tự dò. Phản biện thêm ở góc NGỮ PHÁP CẢNH (`scene-grammar.md`): "Beat đắt nhất
+  (turn/payoff) đang là 1 cú máy dài hay đã có coverage (`shots[]`) — nếu 1 cú, vì sao đủ? Nhịp
+  duration có biến thiên theo cảm xúc hay đang đều tăm tắp? Chuỗi cảnh nào trùng góc máy mà không
+  nói được lý do trục điểm nhìn?"
 - GATE 2 (character): "Frame nào của clip thử nhân vật LỆCH anchor nhất — chấp nhận được không?"
 - GATE 3 (final): AI **không nghe audio, không xem chuyển động** → hỏi thẳng user 2 điều đó
   ("nhạc có đè giọng chỗ nào không? chuyển cảnh 4→5 có giật không?"), đừng tự kết luận "mượt rồi".

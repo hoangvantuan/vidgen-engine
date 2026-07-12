@@ -74,8 +74,10 @@ User gật → set `gates.story_lock = true`. **Chưa gật thì KHÔNG dựng s
 
 > **Điều kiện vào:** chỉ chạy khi `gates.story_lock = true`. Chưa duyệt kịch bản → quay lại GATE 1A.
 
-Tạo `projects/<tên>/project.json` theo schema — **đọc `references/project-schema.md`
-trước khi viết file này** (quy tắc field, độ dài VO khớp duration, cách tách cảnh, cơ chế compiler).
+Tạo `projects/<tên>/project.json` theo schema — **đọc `references/project-schema.md` VÀ
+`references/scene-grammar.md` trước khi viết file này** (schema: quy tắc field, VO khớp duration,
+cơ chế compiler; scene-grammar: ngữ pháp cảnh — coverage, tiến trình cỡ cảnh, 5 luật continuity,
+nhịp dựng, quy tắc kích hoạt link_prev/match_cut/re-establish cho TỪNG cặp cảnh liền kề).
 Điền: `characters` (desc chi tiết; **`voice_id` nếu nhân vật có thoại** — xem dưới), `locations`
 (nếu khoá bối cảnh), `style` chung, scenes. Mặc định `mode: "i2v"` (ảnh duyệt trước, rẻ) — cảnh
 thuần bối cảnh không nhân vật thì `t2v`.
@@ -104,8 +106,17 @@ compiler ghép. Mỗi cảnh điền:
 - `shot_size` (**đa dạng cỡ cảnh** giữa các cảnh liền kề), `camera_angle`, `camera_move`, `lighting`,
   `atmosphere`, `lens`, `sfx[]`, `dialogue[]` — cái nào để trống mà có `emotion` thì compiler tự điền.
 - Continuity: `location` (khoá bối cảnh), `screen_direction` (giữ mạch hướng), `match_cut_with`.
-- `role` (hook/setup/turn/payoff/cta), `transition` theo CẢM XÚC (dissolve vào mơ, fadewhite tỉnh
-  giấc, fade đoạn dịu, cut nhịp nhanh — bảng trong schema), đừng đồng loạt 1 kiểu.
+- `role` (hook/setup/turn/payoff/cta), `transition`: **mặc định `cut`** — transition mềm là dấu câu
+  mang nghĩa (dissolve vào mơ, fadewhite tỉnh giấc, fade thời gian trôi), mỗi lần dùng phải nói được
+  nghĩa; fade đồng loạt = trôi đều slideshow (bài học đo được 67%).
+- `duration` **biến thiên theo beat** (bài học 15/15 cảnh đúng 8s = slideshow): căng/hành động 4-6s,
+  ngấm cảm xúc/lặng 8-10s, leo thang cao trào NGẮN DẦN. VO viết khớp (~3-4 chữ/giây).
+- **Coverage cho beat ĐẮT (`shots[]`):** cảnh `role: hook/turn/payoff` và cảnh `dialogue[]` → cân
+  nhắc kể bằng 2-3 cú cắt xen TRONG CÙNG 1 lần gen (timestamp prompting, 0 credit thêm): điền
+  `shots[]` (mỗi cú: `from/to/shot_size/camera_angle/action`, 2-4s/cú, có ≥1 cú cận/insert/reaction).
+  Cảnh ngấm cần cú dài thì ĐỪNG dùng. Đi qua **bảng kích hoạt continuity** (`scene-grammar.md §7`)
+  cho TỪNG cặp cảnh liền kề: liên tục thời-không → `link_prev`; cùng sự kiện đổi cỡ → `match_cut_with`;
+  vào location mới → mở wide/establishing (re-establish).
 
 Rồi **ghép prompt tự động**:
 ```bash
@@ -122,11 +133,19 @@ Cảnh báo "THIẾU LIỆU" = cảnh chưa có `action` lẫn `prompt` → bổ
 > Kịch bản đã qua GATE 1A; gate này duyệt **KỸ THUẬT** (field/prompt/cỡ cảnh/continuity), không bàn
 > lại hướng. Nếu QC phát hiện phải đổi HƯỚNG kịch bản → quay lại Bước 2 + mở lại `story_lock=false`.
 
-Tự kiểm trước khi trình user (GATE 1B — đã nhồi craft). **Chạy `compile-prompts` xong mới QC prompt:**
+Tự kiểm trước khi trình user (GATE 1B — đã nhồi craft). **Chạy `compile-prompts` xong, chạy tiếp
+QC máy đo rồi mới soi tay** (máy đo cái đo được — nhịp/góc/transition/continuity; người quyết):
+```bash
+$PY $GEN qc-storyboard --project projects/<tên>   # warn-only; mỗi ⚠ hoặc sửa hoặc nêu lý do phá cách
+```
 ☐ **hook** rõ trong 3s (short) / 30s (long), có open loop ☐ cấu trúc mạch rõ (3 hồi / kishōtenketsu)
 ☐ mỗi cảnh 1 ý, VO khớp ~duration ☐ prompt (đã compile) đủ 5 khối, style lặp nguyên văn, không cảnh "THIẾU LIỆU"
-☐ đặc điểm nhân vật nhắc lại trong prompt ☐ **đa dạng cỡ cảnh** (shot_size không đơn điệu)
-☐ **continuity**: screen_direction nhất quán mạch, cảnh cùng bối cảnh trỏ đúng `location`
+☐ đặc điểm nhân vật nhắc lại trong prompt ☐ **đa dạng cỡ cảnh VÀ góc máy** (shot_size, camera_angle
+không đơn điệu — chuỗi ≥3 cảnh trùng góc phải có lý do trục điểm nhìn ghi trong kichban.md)
+☐ **nhịp**: duration biến thiên theo beat, không chuỗi ≥4 cảnh cùng độ dài vô cớ ☐ transition mặc định
+cut, mỗi fade/dissolve nêu được nghĩa ☐ **beat đắt (hook/turn/payoff/thoại) có coverage `shots[]`**
+hoặc lý do 1 cú ☐ **continuity**: screen_direction nhất quán mạch, cảnh cùng bối cảnh trỏ đúng
+`location`, vào location mới có re-establish, cặp cảnh liền kề đã qua bảng kích hoạt (`scene-grammar.md §7`)
 ☐ không yêu cầu chữ trong hình ☐ không em-dash ☐ tổng thời lượng khớp brief ☐ **1 CTA** duy nhất.
 **Craft LỜI (đọc-to, theo `vo-writing-craft.md`):** ☐ câu VO đầu không dạo đầu (niên đại/tên/chào)
 ☐ có ≥1 open loop cấy sớm–đóng ở payoff ☐ đọc to 3 cảnh liền không đều nhịp (có câu cụt để đấm)

@@ -24,6 +24,25 @@ Càng chi tiết từng khối → càng kiểm soát output. Mẫu điền:
   AI bịa chữ/thư pháp; tắt bằng `--allow-text`.
 - **Continuity địa điểm:** cảnh liền kề cùng bối cảnh → lặp NGUYÊN VĂN cụm mô tả địa điểm.
 
+## 1b · Coverage trong 1 generation — TIMESTAMP PROMPTING (Veo 3.1)
+
+Bằng chứng (nguồn chính thức Google Cloud): Veo 3.1 nhận prompt đánh **mốc thời gian** để gen
+NHIỀU cú cắt xen trong CÙNG 1 lần gen — cách rẻ nhất (0 credit thêm) để 1 khoảnh khắc có
+wide + close + insert như phim, các cú tự nhất quán (chung generation):
+```
+[00:00-00:03] Wide shot, eye-level: the old woman presses a sweet potato into the girl's hands.
+[00:03-00:06] Close-up: the girl's face, eyes widening, she looks up.
+[00:06-00:08] Extreme close-up, insert: the potato in her small hands, steam rising.
+```
+- Khai báo qua `scenes[].shots[]` — `flowgen compile-prompts` tự ghép đúng định dạng (thiết lập
+  chung subject+context trước, chuỗi mốc sau, style cuối). Mỗi cú 2-4s; tổng ≤ `duration`.
+- **Độ nghe lời mốc CHƯA kiểm chứng độc lập** → cảnh coverage đầu tiên phải nằm trong CLIP THỬ
+  (GATE 2). Không đạt → hạ về 1 cú, hoặc đường B: **save frame trong Flow** (chính thức, Flow Help)
+  — trích frame master làm ingredient/khung đầu regen cú cận (+1-2 gen; mặt có thể drift ở close-up,
+  ánh sáng chỉ gần khớp — chèn insert giữa 2 cú lệch để mắt "reset").
+- Khi nào NÊN coverage, tiến trình cỡ cảnh, luật 30°/match-cut giữa các cú: thiết kế ở tầng
+  storyboard — `vidgen-script/references/scene-grammar.md` (§2-§7).
+
 ## 2 · Vựng từ điện ảnh → đưa thẳng vào prompt (điền `shot_size`, `camera_move`)
 
 **Cỡ cảnh (`shot_size`)** — đa dạng giữa các cảnh liền kề:
@@ -160,9 +179,11 @@ bị chặn: `MEDIA_GENERATION_STATUS_FAILED` (khác lỗi `400 invalid argument
 ## Map vào stage
 
 - **Storyboard (Stage 1):** điền field craft → `flowgen compile-prompts` ghép ra `scenes[].prompt`
-  (5 khối trên) tự động; viết tay thì bật `prompt_override`. `shot_size`/`camera_angle`/`camera_move`/
-  `lighting`/`atmosphere`/`sfx`/`screen_direction` là nguyên liệu compiler. Chi tiết compiler:
+  (5 khối trên, hoặc chuỗi timestamp nếu cảnh có `shots[]` — mục 1b) tự động; viết tay thì bật
+  `prompt_override`. `shot_size`/`camera_angle`/`camera_move`/`lighting`/`atmosphere`/`sfx`/
+  `screen_direction` là nguyên liệu compiler. Chi tiết compiler:
   `vidgen-script/references/project-schema.md` (mục "Field craft chi tiết + PROMPT COMPILER").
+  Trước GATE 1B chạy `flowgen qc-storyboard` (đo nhịp/góc/transition/continuity, warn-only).
 - **Gen clip (Stage 3):** flowgen dùng character + location anchor làm ref (≤3), đọc `prompt` đã compile.
 - Checklist gate: prompt có đủ 5 khối? style lặp nguyên văn? đặc điểm nhân vật nhắc lại? có
   shot_size/camera_move rõ? screen_direction nhất quán mạch? không yêu cầu chữ trong hình?
