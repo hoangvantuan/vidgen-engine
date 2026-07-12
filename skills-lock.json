@@ -5,13 +5,13 @@
       "source": "elevenlabs/skills",
       "sourceType": "github",
       "skillPath": "music/SKILL.md",
-      "computedHash": "4bc63c6e9a2361f06ba821b0c927718dd989034d606991090ff2f027632c27bf"
+      "computedHash": "8eb2ab5ca4f8a6d5f4c20964bc98d5e76eda5e0f0c532f34ea8dadde48e8974f"
     },
     "remotion-best-practices": {
       "source": "remotion-dev/skills",
       "sourceType": "github",
       "skillPath": "skills/remotion/SKILL.md",
-      "computedHash": "14e4caa85e5c91d629e53397f94c9e8bb81460e93cafa31b278d14f5e9f640b7"
+      "computedHash": "5284f294f0bad7c1217d24af5044a5c672d9202b218331db33e833d64ce121a4"
     },
     "setup-api-key": {
       "source": "elevenlabs/skills",
