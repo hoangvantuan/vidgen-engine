@@ -36,6 +36,19 @@ window.fetch = async function (...args) {
   try {
     const url = typeof args[0] === 'string' ? args[0] : args[0]?.url || '';
 
+    // ─── CAPTURE body request gen video (để đối chiếu body Veo 3.1 thật) ──
+    // Đọc lại qua eval_page → window.__capturedVideoReq. KHÔNG chặn (request đi thật).
+    if (/batchAsyncGenerateVideo/.test(url) && args[1]?.body) {
+      try {
+        const b = args[1].body;
+        const bodyStr = typeof b === 'string' ? b : JSON.stringify(b);
+        (window.__capturedVideoReq = window.__capturedVideoReq || []).push({
+          url, method: args[1]?.method || 'POST', body: bodyStr,
+        });
+        if (window.__capturedVideoReq.length > 10) window.__capturedVideoReq.shift();
+      } catch {}
+    }
+
     // ─── SNIFF ALL outgoing requests (catch upload) ─────────
     {
       let bodyText = '';

@@ -4,7 +4,7 @@ import logging
 import random
 import uuid
 
-from ..config import ENDPOINTS
+from ..config import ENDPOINTS, video_model_key
 from .common import build_client_context, build_generation_context
 
 log = logging.getLogger("omniflash.generators.t2v")
@@ -13,7 +13,7 @@ log = logging.getLogger("omniflash.generators.t2v")
 async def generate_video(bridge, prompt: str, aspect: str, project_id: str,
                          duration: int = 10, count: int = 1) -> list[str] | None:
     """Submit T2V generation request. Returns list of media_ids."""
-    model_key = f"abra_t2v_{duration}s"
+    model_key = video_model_key("t2v", duration)
 
     requests = []
     for _ in range(count):

@@ -198,6 +198,8 @@ function connectToAgent() {
         await handleApiRequest(msg);
       } else if (msg.method === 'trpc_request') {
         await handleTrpcRequest(msg);
+      } else if (msg.method === 'eval_page') {
+        await handleEvalPage(msg);
       } else if (msg.method === 'upload_video') {
         await handleUploadVideo(msg);
       } else if (msg.method === 'solve_captcha') {
@@ -447,6 +449,100 @@ async function handleTrpcRequest(msg) {
   }
 }
 
+
+async function handleEvalPage(msg) {
+  // Quét mọi JS chunk của trang Flow (MAIN world, cùng origin) → grep model key.
+  // Dùng để lấy videoModelKey thật cho mọi mode (t2v/i2v/r2v/fl + omni) mà KHÔNG gen.
+  const { id } = msg;
+  try {
+    const tabs = await chrome.tabs.query({ url: '*://labs.google/*' });
+    if (!tabs.length) { sendToAgent({ id, error: 'NO_FLOW_TAB' }); return; }
+    // Ưu tiên tab trang Flow thật (có /fx/tools/flow), fallback tab đầu
+    const tab = tabs.find(t => (t.url || '').includes('/fx/tools/flow')) || tabs[0];
+    const dbg = { tabCount: tabs.length, tabUrl: (tab.url || '').slice(0, 80) };
+
+    const execP = chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      world: 'MAIN',
+      func: async () => {
+        // Key gen thật: chữ thường, có prefix model + underscore (loại biến minified veObject…)
+        const keyRe = /\b((?:veo|omni|imagen|gempix|nano)_[a-z0-9_]+)\b/g;
+        // Ngữ cảnh quanh nơi gán videoModelKey / modelKey → thấy cách build key thật
+        const ctxRe = /.{0,40}(?:videoModelKey|modelKey|modelName)["'`\s:=]{1,4}[^;,\n]{0,60}/gi;
+        const keys = new Set(), ctx = new Set();
+        const grep = (t) => {
+          if (!t) return;
+          let m; keyRe.lastIndex = 0;
+          while ((m = keyRe.exec(t))) keys.add(m[1]);
+          ctxRe.lastIndex = 0;
+          while ((m = ctxRe.exec(t))) { if (ctx.size < 60) ctx.add(m[0].replace(/\s+/g, ' ').trim()); }
+        };
+        // Nguồn tức thì: inline scripts + __NEXT_DATA__
+        try { document.querySelectorAll('script:not([src])').forEach(s => grep(s.textContent)); } catch {}
+        try { grep(JSON.stringify(window.__NEXT_DATA__ || {})); } catch {}
+
+        // Đọc React fiber props toàn trang → gom object model runtime (dropdown đang mở)
+        const fiberHits = [];
+        try {
+          const seen = new WeakSet();
+          const safe = (o, d) => {
+            if (d > 6 || o == null || typeof o !== 'object') return;
+            if (seen.has(o)) return; seen.add(o);
+            for (const k in o) {
+              try {
+                const v = o[k];
+                if (typeof v === 'string' && /^(?:veo|omni|imagen|gempix)_[a-z0-9_]+$/i.test(v)) {
+                  if (/videoModel|modelKey|key|value|id/i.test(k)) fiberHits.push({ [k]: v });
+                  keys.add(v);
+                } else if (typeof v === 'object') safe(v, d + 1);
+              } catch {}
+            }
+          };
+          document.querySelectorAll('[role="menuitem"],[role="option"],[role="radio"],button,li,[data-value]').forEach(el => {
+            for (const p in el) {
+              if (p.startsWith('__reactProps$') || p.startsWith('__reactFiber$')) {
+                try { safe(el[p], 0); } catch {}
+              }
+            }
+          });
+        } catch {}
+
+        const srcs = new Set();
+        try { document.querySelectorAll('script[src]').forEach(s => srcs.add(s.src)); } catch {}
+        try {
+          performance.getEntriesByType('resource')
+            .filter(e => e.name.endsWith('.js')).forEach(e => srcs.add(e.name));
+        } catch {}
+        // Chỉ same-origin (tránh CORS treo), ưu tiên chunk _next
+        const list = [...srcs].filter(u => u.startsWith(location.origin)).slice(0, 60);
+        const withTimeout = (p, ms) => Promise.race([p, new Promise(r => setTimeout(() => r(null), ms))]);
+        let scanned = 0;
+        await Promise.all(list.map(async (u) => {
+          try {
+            const resp = await withTimeout(fetch(u), 8000);
+            if (!resp) return;
+            const t = await withTimeout(resp.text(), 5000);
+            if (t) { scanned++; grep(t); }
+          } catch {}
+        }));
+        return {
+          scanned, total: list.length, origin: location.origin,
+          keys: [...keys].sort(),
+          fiberHits,
+          ctx: [...ctx],
+          capturedVideoReq: (window.__capturedVideoReq || []),
+        };
+      },
+    });
+    const results = await Promise.race([
+      execP,
+      new Promise((_, rej) => setTimeout(() => rej(new Error('EXEC_TIMEOUT')), 30000)),
+    ]);
+    sendToAgent({ id, status: 200, data: { ...dbg, ...(results?.[0]?.result || {}) } });
+  } catch (e) {
+    sendToAgent({ id, error: `EVAL_PAGE_ERROR: ${e.message}` });
+  }
+}
 
 async function handleUploadVideo(msg) {
   const { id, params } = msg;

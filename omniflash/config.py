@@ -14,8 +14,9 @@ MEDIA_ID_FILE = os.path.join(ROOT_DIR, "media-id.js")
 
 DEFAULT_PROJECT = "0143adf4-5864-4cb4-abb5-fe4254ad0dc7"
 
-# Image model: NARWHAL (Imagen 4 / Nano Banana 2), GEM_PIX_2, IMAGEN_4
-IMAGE_MODEL = "NARWHAL"
+# Image model (imageModelName gửi lên Flow batchGenerateImages). Lựa chọn:
+#   GEM_PIX_2 = Nano Banana 2 (Gempix2)  ·  IMAGEN_4 = Imagen 4  ·  NARWHAL = Imagen (đời cũ)
+IMAGE_MODEL = "GEM_PIX_2"
 
 # ─── Hardcoded constants (never change) ──────────────────────
 
@@ -24,10 +25,46 @@ API_BASE = "https://aisandbox-pa.googleapis.com"
 
 CLIENT_CTX = {
     "tool": "PINHOLE",
-    "tier": "PAYGATE_TIER_ONE",
+    # Tier account — xác thực từ HAR Flow UI (2026-07): tài khoản trả phí là TIER_TWO.
+    # Gửi sai tier → Flow có thể chặn/hạ cấp model. Override qua env FLOW_PAYGATE_TIER.
+    "tier": os.environ.get("FLOW_PAYGATE_TIER", "PAYGATE_TIER_TWO"),
     "origin": "https://labs.google",
     "recaptcha_app_type": "RECAPTCHA_APPLICATION_TYPE_WEB",
 }
+
+# ─── Video model keys (videoModelKey) ────────────────────────
+# CHỐT theo request GEN THẬT của Flow UI (HAR + capture qua extension, 2026-07-13,
+# verify bằng gen clip thật qua pipeline). Naming KHÔNG đồng nhất giữa các mode:
+#
+#   · t2v  = "veo_3_1_t2v"        — Veo 3.1, KHÔNG duration trong key, ra ~8s CỐ ĐỊNH.
+#                                    ✅ verify: gen clip thật (192f/24 = 8s).
+#   · i2v  = "abra_i2v_<dur>s"    — codename abra, DURATION trong key, ra ĐÚNG duration.
+#                                    ✅ verify: gen clip thật (dur=4 → 96f/24 = 4s).
+#                                    (veo_3_1_i2v KHÔNG tồn tại → HTTP 500 "Internal error".)
+#   · fl   = "abra_fl_<dur>s"     — ⚠️ suy luận theo pattern abra_<mode>_<dur>s, CHƯA verify.
+#   · r2v  = "abra_r2v_<dur>s"    — ⚠️ suy luận, CHƯA verify (Flow phân biệt referenceImages
+#                                    vs 'ingredients'(Omni) — xem log). Verify khi chạy thật.
+#
+# Ghi chú tier: dropdown Flow có modelFamilyId veo_3_1_quality/fast/lite (React fiber);
+#   đó là lựa chọn UI, request cơ bản KHÔNG kèm field tier. Muốn ÉP Quality cần bắt thêm HAR.
+# Override từng mode qua env FLOW_VMK_<MODE> (vd FLOW_VMK_I2V=abra_i2v_6s). Nhánh legacy:
+#   FLOW_VIDEO_MODEL=abra ⇒ mọi mode dùng abra_<mode>_<dur>s.
+VIDEO_MODEL = os.environ.get("FLOW_VIDEO_MODEL", "auto")
+
+
+def video_model_key(mode: str, duration: int = 0) -> str:
+    """Trả videoModelKey THẬT cho mode gen (verify từ request Flow UI 2026-07-13).
+
+    Override per-mode qua env FLOW_VMK_<MODE>. FLOW_VIDEO_MODEL=abra ⇒ toàn abra_<mode>.
+    """
+    env = os.environ.get(f"FLOW_VMK_{mode.upper()}")
+    if env:
+        return env
+    if VIDEO_MODEL == "abra":
+        return f"abra_{mode}_{duration}s"
+    if mode == "t2v":
+        return "veo_3_1_t2v"                      # Veo 3.1 (tốt nhất, verify)
+    return f"abra_{mode}_{duration}s"             # i2v verify; fl/r2v suy luận
 
 ASPECTS = {
     "portrait": "VIDEO_ASPECT_RATIO_PORTRAIT",

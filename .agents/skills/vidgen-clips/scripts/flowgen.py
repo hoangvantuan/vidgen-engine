@@ -1349,6 +1349,63 @@ async def cmd_qc_clips(a):  # async khớp dispatch; thân local (cv2), KHÔNG c
           "NGƯỜI quyết regen (scene-clips --regen --scene N).")
 
 
+async def cmd_list_models(a):
+    """Hỏi THẲNG Flow danh sách video model account được cấp (getVideoModelConfig).
+
+    Không tốn credit. Dùng để chọn videoModelKey 'quality' thật thay vì đoán.
+    """
+    import urllib.parse as _url
+
+    base = "https://labs.google/fx/api/trpc/videoFx.getVideoModelConfig"
+    inp_null = _url.quote('{"json":null}')
+    inp_batch = _url.quote('{"0":{"json":null}}')
+    candidates = [
+        (base, "GET"),
+        (f"{base}?input={inp_null}", "GET"),
+        (f"{base}?batch=1&input={inp_batch}", "GET"),
+    ]
+    if a.url:                       # cho phép override URL để thăm dò thủ công
+        candidates = [(a.url, a.method)]
+
+    bridge = await open_bridge()
+    try:
+        chosen = None
+        for url, method in candidates:
+            r = await bridge.trpc_request(url, method=method)
+            status = r.get("status")
+            data = r.get("data")
+            if status == 200 and data:
+                chosen = (url, r)
+                break
+            print(f"… thử {method} {url[:80]} → status={status} err={r.get('error')}",
+                  file=sys.stderr)
+        if not chosen:
+            raise SystemExit("Không lấy được model config — xem log trên. "
+                             "Có thể tên procedure/format tRPC đã đổi; "
+                             "dùng --url để chỉ định thủ công (bắt HAR trên Flow).")
+        url, r = chosen
+        print(f"# OK: {url}\n", file=sys.stderr)
+        print(json.dumps(r.get("data"), ensure_ascii=False, indent=2))
+    finally:
+        await bridge.close()
+
+
+async def cmd_scan_models(a):
+    """Quét JS bundle trang Flow → liệt kê mọi videoModelKey (t2v/i2v/r2v/fl + omni).
+
+    MIỄN PHÍ credit, không drive UI. Cần Chrome mở tab Flow (đã login).
+    """
+    bridge = await open_bridge()
+    try:
+        r = await bridge.eval_page(timeout=90)
+        data = r.get("data", r)
+        if data.get("error") or r.get("error"):
+            raise SystemExit(f"Scan lỗi: {data.get('error') or r.get('error')}")
+        print(json.dumps(data, ensure_ascii=False, indent=2))
+    finally:
+        await bridge.close()
+
+
 # ── main ──────────────────────────────────────────────────────────────────
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -1438,6 +1495,19 @@ def main():
     p.add_argument("--project", required=True)
     p.add_argument("--scene", type=int, nargs="*", help="chỉ các cảnh này")
     p.set_defaults(fn=cmd_qc_clips)
+
+    p = sub.add_parser("list-models",
+                       help="hỏi Flow danh sách video model được cấp (getVideoModelConfig, "
+                            "MIỄN PHÍ) — chọn videoModelKey 'quality' thật thay vì đoán")
+    p.add_argument("--url", default=None,
+                   help="override URL tRPC thủ công (khi procedure đổi tên)")
+    p.add_argument("--method", default="GET")
+    p.set_defaults(fn=cmd_list_models)
+
+    p = sub.add_parser("scan-models",
+                       help="quét JS bundle trang Flow → liệt kê mọi videoModelKey "
+                            "(t2v/i2v/r2v/fl + omni), MIỄN PHÍ, cần tab Flow đang mở")
+    p.set_defaults(fn=cmd_scan_models)
 
     a = ap.parse_args()
     asyncio.run(a.fn(a))

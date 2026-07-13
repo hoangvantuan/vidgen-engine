@@ -226,6 +226,55 @@ class ExtensionBridge:
         finally:
             self._pending.pop(req_id, None)
 
+    async def trpc_request(self, url, method="GET", body=None, headers=None,
+                           timeout=30):
+        """Gọi endpoint labs.google (tRPC / session) qua extension.
+
+        Khác api_request: fetch THẲNG url labs.google với cookie session +
+        Bearer flowKey (credentials:include) — dùng cho các endpoint config
+        như getVideoModelConfig. KHÔNG ghép API_BASE / ?key=.
+        """
+        if not self._ws:
+            return {"error": "Extension not connected"}
+
+        req_id = str(uuid.uuid4())
+        future = self._loop.create_future()
+        self._pending[req_id] = future
+
+        params = {"url": url, "method": method}
+        if headers:
+            params["headers"] = headers
+        if body is not None:
+            params["body"] = body
+
+        await self._ws.send(json.dumps({
+            "id": req_id,
+            "method": "trpc_request",
+            "params": params,
+        }))
+
+        try:
+            return await asyncio.wait_for(future, timeout=timeout)
+        except asyncio.TimeoutError:
+            return {"error": "TIMEOUT"}
+        finally:
+            self._pending.pop(req_id, None)
+
+    async def eval_page(self, timeout=60):
+        """Chạy probe quét model key trong trang Flow (qua extension). Trả dict data."""
+        if not self._ws:
+            return {"error": "Extension not connected"}
+        req_id = str(uuid.uuid4())
+        future = self._loop.create_future()
+        self._pending[req_id] = future
+        await self._ws.send(json.dumps({"id": req_id, "method": "eval_page"}))
+        try:
+            return await asyncio.wait_for(future, timeout=timeout)
+        except asyncio.TimeoutError:
+            return {"error": "TIMEOUT"}
+        finally:
+            self._pending.pop(req_id, None)
+
     def _start_http_server(self):
         """Start HTTP server for extension callbacks (runs in thread)."""
         bridge = self

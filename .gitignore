@@ -11,3 +11,6 @@ projects/
 # brand: preview/demo tái tạo được — đừng để phình repo
 assets/brands/*/demo/
 assets/logo/_preview_*.jpg
+
+# Chrome tự sinh khi load unpacked extension (indexed declarativeNetRequest ruleset) — không commit
+extension/_metadata/

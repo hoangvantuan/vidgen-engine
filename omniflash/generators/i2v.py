@@ -5,7 +5,7 @@ import logging
 import os
 import random
 
-from ..config import CLIENT_CTX, ENDPOINTS
+from ..config import CLIENT_CTX, ENDPOINTS, video_model_key
 from .. import media_store
 from .common import build_client_context, build_generation_context
 
@@ -52,7 +52,7 @@ async def upload_image(bridge, image_path: str, project_id: str = None) -> str |
 async def generate_video_i2v(bridge, prompt: str, aspect: str, project_id: str,
                               image_media_id: str, duration: int = 8) -> list[str] | None:
     """Generate video from a start image. Returns list of media_ids."""
-    model_key = f"abra_t2v_{duration}s"
+    model_key = video_model_key("i2v", duration)
 
     body = {
         "mediaGenerationContext": build_generation_context(),
@@ -65,6 +65,7 @@ async def generate_video_i2v(bridge, prompt: str, aspect: str, project_id: str,
             "metadata": {},
             "startImage": {"mediaId": image_media_id},
         }],
+        "useV2ModelConfig": True,   # Veo 3.1 bắt buộc (như t2v/fl); thiếu → HTTP 500
     }
 
     log.info('🖼️→🎬 I2V: "%s" [%s] image=%s', prompt[:50], model_key, image_media_id[:12])
@@ -97,7 +98,7 @@ async def generate_video_fl(bridge, prompt: str, aspect: str, project_id: str,
     
     Video transitions smoothly from start_image to end_image.
     """
-    model_key = f"abra_t2v_{duration}s"
+    model_key = video_model_key("fl", duration)
 
     request = {
         "aspectRatio": aspect,
@@ -146,7 +147,7 @@ async def generate_video_r2v(bridge, prompt: str, aspect: str, project_id: str,
     
     Uses reference images to maintain visual consistency in the generated video.
     """
-    model_key = f"abra_t2v_{duration}s"
+    model_key = video_model_key("r2v", duration)
 
     ref_images = [
         {"mediaId": mid, "imageUsageType": "IMAGE_USAGE_TYPE_ASSET"}
