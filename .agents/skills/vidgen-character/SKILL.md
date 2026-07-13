@@ -15,15 +15,24 @@ PY=~/.venv/claude/bin/python
 GEN=.agents/skills/vidgen-clips/scripts/flowgen.py   # engine dùng chung
 ```
 
-## Bước 1 · Char sheet (cho người duyệt)
+## Bước 1 · MASTER DESIGN SHEET (cho người duyệt — bản thể hiện thị giác của bảng element)
 
-Mỗi nhân vật trong `project.json` → gen 1 char sheet bằng T2I:
+Mỗi nhân vật CHÍNH → gen 1 **master design sheet** bằng T2I — 1 lần render nên mọi biến thể
+cùng ánh sáng/style/tỉ lệ (ưu điểm cốt lõi của sheet). Nội dung chuẩn (theo mẫu đã chốt 07-12):
+**turnaround đủ góc** (front · 3/4-front trái/phải · trái · phải · lưng) + **expressions** (6-8
+biểu cảm) + **poses** đặc trưng + **accessories/hero-prop** + **color palette** + **companion**
+(nhân vật phụ đi kèm nếu có) + **close-up chi tiết** (mắt, hoạ tiết áo):
 ```bash
-$PY $GEN t2i --prompt "character sheet, <desc EN>, multiple angles (front, side, back), \
-consistent outfit, plain white background, <style chung của dự án>" \
+$PY $GEN t2i --prompt "character design sheet for <tên>, <desc EN>: full turnaround (front, \
+3/4 front left, 3/4 front right, left side, right side, back), 6 facial expressions, key poses, \
+accessories laid out separately, color palette swatches, close-up details, consistent outfit \
+and lighting across all views, plain background, <style chung của dự án>" \
   --aspect landscape --out projects/<tên>/02_characters/<id>_sheet.png
 ```
-User duyệt danh tính (mặt, trang phục, vibe) TRÊN CHAR SHEET trước — sửa ở đây rẻ nhất.
+User duyệt danh tính (mặt, trang phục, palette, vibe) TRÊN SHEET trước — sửa ở đây rẻ nhất; sheet
+đã duyệt = nguồn sự thật thị giác cho GATE 1A2 (elements.md trỏ tới) và chuẩn so chéo ở GATE 2.
+**Sheet TUYỆT ĐỐI không nạp vào Flow làm reference** (nhiều hình/ảnh → Veo trộn mặt, verify 3-0);
+expressions/poses cũng KHÔNG anchor hoá — biểu cảm là việc của `emotion`/`action` per shot.
 
 ## Bước 2 · Anchor (cho máy)
 
@@ -33,13 +42,19 @@ KHÔNG phân biệt chính/phụ.** Bài học đo được (bé Tuệ An): mẹ
 qc-storyboard` (nhóm THỰC THỂ) bắt nhân vật mồ côi; đám đông/người nền thì KHÔNG anchor, viết
 action né mặt (turned away / silhouette / out of focus).
 
-Nhân vật luôn 1 góc + video ngắn → chỉ cần 1 anchor. Đổi nhiều góc → mỗi góc 1 anchor.
-Gen TỪNG anchor riêng (không cắt từ sheet — chất lượng thấp):
+Nhân vật CHÍNH → **ĐỦ GÓC theo turnaround của master sheet** (front · 3q_front_left ·
+3q_front_right · left · right · back — nhất quán với luật location 9 góc, mandate chất lượng:
+shot đổi góc mà thiếu anchor góc đó là Veo tự bịa). Nhân vật phụ ít cảnh → tối thiểu front + side.
+Gen TỪNG anchor riêng (KHÔNG cắt từ sheet — độ phân giải ô sheet thấp), dùng ảnh hero/sheet đã
+duyệt làm `--ref` để anchor bám đúng thiết kế:
 ```bash
 $PY $GEN t2i --prompt "<desc EN>, front view, standing, plain white background, \
 full body, single character, <style chung>" --aspect portrait \
+  --ref <media_id ảnh hero đã upload> \
   --out projects/<tên>/02_characters/<id>_front.png
 ```
+Đặt `angle` đúng tên góc (front/3q_front_left/.../back) — flowgen `_pick_anchor` chọn anchor
+khớp `angle` của shot.
 Yêu cầu anchor: **1 người/ảnh · 1 góc · nền trơn · rõ mặt · style đồng bộ giữa mọi anchor**.
 Lệnh in ra `media_id` → ghi ngay vào `characters[].anchors[]` trong manifest.
 Ảnh có sẵn (user đưa) thì upload: `$PY $GEN upload-image path.png` → lấy media_id.

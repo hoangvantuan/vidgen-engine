@@ -79,8 +79,14 @@ Manifest là NGUỒN SỰ THẬT duy nhất về trạng thái dự án. Script 
                                                                //   tts_to_ass.py ĐỌC & áp TỰ ĐỘNG (đường đa giọng),
                                                                //   giữ nguyên độ dài → timestamp không xô. Narrator
                                                                //   KHÔNG bị đụng. VD giọng bé: +2 (giọng kể ≠ giọng bé).
-      "sheet": "02_characters/be_na_sheet.png",                 // char sheet — cho NGƯỜI duyệt, KHÔNG nạp vào Flow
-      "anchors": [                                              // anchor — cho MÁY: 1 người/ảnh, 1 góc, nền trơn
+      "sheet": "02_characters/be_na_sheet.png",                 // MASTER DESIGN SHEET (turnaround + expressions +
+                                                                //   poses + accessories + palette + companion) —
+                                                                //   cho NGƯỜI duyệt + nguồn derive anchor,
+                                                                //   TUYỆT ĐỐI không nạp vào Flow (Veo trộn mặt)
+      "anchors": [                                              // anchor — cho MÁY: 1 người/ảnh, 1 góc, nền trơn.
+                                                                // Nhân vật CHÍNH: ĐỦ GÓC theo turnaround
+                                                                // (front/3q_front_left/3q_front_right/left/right/back);
+                                                                // vai phụ ít cảnh: tối thiểu front + side.
         { "angle": "front", "file": "02_characters/be_na_front.png", "media_id": "" },
         { "angle": "side",  "file": "02_characters/be_na_side.png",  "media_id": "" }
       ]
