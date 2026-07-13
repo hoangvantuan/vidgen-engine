@@ -85,7 +85,8 @@ def save_manifest(project_dir: Path, m: dict):
 
 
 # Câu đuôi chống AI tự chèn chữ vào ảnh (T2I hay bịa text/thư pháp/watermark dù không yêu cầu).
-NO_TEXT = ", no text, no letters, no words, no captions, no watermark, no signage"
+NO_TEXT = (", no text, no letters, no words, no captions, no watermark, no signage"
+           ", no speech bubbles, no comic dialogue balloons")
 
 
 def patch_scene(project_dir: Path, scene_id, key: str, value):
@@ -429,10 +430,11 @@ def compile_scene_prompt(m: dict, s: dict) -> tuple[str | None, str]:
         if pid in props and props[pid].get("desc") \
                 and pid not in {h for hs in (st.get("held_props") or {}).values() for h in hs}:
             subj.append(props[pid]["desc"])
-    for d in s.get("dialogue", []) or []:
-        line = (d.get("line") or "").strip()
-        if line:
-            subj.append(f'the character says "{line}"')
+    # Pipeline LỒNG TIẾNG (bỏ audio Veo, không khớp miệng) → KHÔNG nhét câu thoại literal vào
+    # prompt: chữ nước ngoài khiến model vẽ BONG BÓNG THOẠI/chữ trong hình (bài học akasto).
+    # Chỉ phát tín hiệu "đang nói" TRUNG TÍNH cho khẩu hình động; lời thật do tts_to_ass.py đọc.
+    if s.get("dialogue"):
+        subj.append("the character is speaking warmly, mouth gently open mid-word, expressive face")
 
     # [Context] — khoá bối cảnh: lặp nguyên văn desc location
     locs = {l["id"]: l for l in m.get("locations", [])}

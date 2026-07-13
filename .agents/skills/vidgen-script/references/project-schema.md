@@ -345,7 +345,8 @@ field có cấu trúc để (a) QC tự động, (b) auto-fill từ tri thức �
   `gen_sfx.py` gen file SFX sạch từ `sfx[]` → `assemble.py --sfx auto` mix làm lớp thứ 3 dưới giọng. KHÔNG mồ côi.
 - **`dialogue[]`** — thoại NHÂN VẬT, tách khỏi `vo` (narration). **CÓ CONSUMER** (Stage 4, đường đa giọng): mỗi
   lượt `{char, line}` được `tts_to_ass.py` gen bằng **giọng riêng của nhân vật** (`characters[char].voice_id`),
-  nối đúng timing → nghe được ở bản ráp. Vẫn vào `[Subject]` của prompt (Veo diễn khẩu hình). Xem "Đa giọng" cuối file.
+  nối đúng timing → nghe được ở bản ráp. Prompt KHÔNG chứa câu thoại literal (chữ → AI vẽ speech
+  bubble) — compiler chỉ phát tín hiệu trung tính "speaking warmly" cho khẩu hình. Xem "Đa giọng" cuối file.
 
 **Nhóm continuity (scene) — chống 2 lỗi kinh điển của video AI ghép cảnh:**
 - **`screen_direction`** — hướng chuyển động trên khung (L2R/R2L/toward/away/static). AI hay tự đảo

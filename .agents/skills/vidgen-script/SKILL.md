@@ -130,10 +130,10 @@ vào `desc`. Bake đạo cụ biến thiên vào desc/anchor → compiler lặp 
 trước khi nở, phá payoff bất ngờ). Cần "không có X" ở vài cảnh thì ghi phủ định trong `action` ("a round
 seed, NOT a sprout, no leaves").
 
-**Prompt ẢNH ≠ prompt CLIP (bài học `dialogue[]`→bong bóng chữ):** compiler nhét `the character says "…"`
-vào `prompt` để Veo diễn khẩu hình — nhưng `scene-images` (T2I) dùng CHUNG prompt đó nên AI **vẽ speech
-bubble chữ** trong ảnh. Cảnh có `dialogue[]` → sau compile, **bỏ cụm `the character says "…"` khỏi
-`prompt` + set `prompt_override:true`** (giữ khẩu hình qua `action` "whispering"). Ảnh sạch, clip vẫn dub.
+**Bong bóng thoại (bài học `dialogue[]` — ĐÃ FIX TẠI NGUỒN):** compiler KHÔNG còn nhét câu thoại
+literal vào prompt (chữ trong prompt → AI vẽ speech bubble); cảnh có `dialogue[]` chỉ được phát
+tín hiệu trung tính "speaking warmly, mouth gently open" cho khẩu hình động, lời thật do TTS đọc.
+NO_TEXT cũng đã kèm "no speech bubbles". Không cần bước tay bỏ cụm thoại + prompt_override nữa.
 
 **Cảnh có thoại nhân vật (đa giọng):** điền `dialogue[]` (`{char, line}`) + gán `characters[].voice_id`
 cho nhân vật đó. **Mô hình P1: cảnh có `dialogue[]` thì để trống `vo`** (mỗi cảnh 1 kiểu tiếng); đan
